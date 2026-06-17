@@ -17,6 +17,6 @@ We Are Going Home
 - change absolute path to the folder containing trials in main()
 - change how to access weights (float Wg_init[24], float Cg_init[2], float xstd_init[12], float xmean_init[12]); in order to quickly copy to 
 
-New Program (replaces the tera term step)
+New Program: Realtime Testing (replaces the tera term step)
 - a python GUI that combines live emg graph, predictions (1s and 2s via UART) and video and voice (from video camera) (similar to FirstPhase,py)
 - "EMGliveviewer" records EMG prediction and video and synchronizes them, (but theres a better way to implement it)
