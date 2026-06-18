@@ -46,9 +46,10 @@ CAM_FPS       = 30
 AUDIO_DEVICE  = None          # mic input device (None = system default)
 AUDIO_RATE    = 44100         # sample rate (Hz)
 AUDIO_BLOCK   = 1024          # samples per audio callback block
-AUDIO_DECIM   = 16            # plot every Nth sample (keeps the waveform light)
-AUDIO_POINTS  = 2000          # rolling waveform length on screen
-AUDIO_MIN_SPAN = 0.02         # smallest half-height so silence doesn't over-zoom
+AUDIO_DECIM   = 16            # (unused) kept for reference
+AUDIO_POINTS  = 2000          # (unused) kept for reference
+AUDIO_ENV_CHUNK = 441         # samples per envelope point (~10 ms at 44.1 kHz)
+AUDIO_MIN_SPAN = 0.02         # smallest height so silence doesn't over-zoom
 
 VREF          = 3.0           # ADC reference voltage
 ADC_RES       = 4095.0        # 12-bit ADC full scale
@@ -216,18 +217,18 @@ class CameraCapture:
 # =============================================================
 class AudioCapture:
     """
-    Captures the (camera) microphone via sounddevice. Keeps a rolling decimated
-    waveform for live display, and can also record full-resolution mono audio to
-    a WAV file (paused-aware) for muxing into the trial video.
+    Captures the (camera) microphone via sounddevice. While a trial records, it
+    (a) writes full-resolution mono audio to a paused-aware WAV for muxing, and
+    (b) builds a time-stamped amplitude envelope (peak per short window) on a
+    paused-excluded clock, so the sound graph aligns in time with the EMG graph.
     """
 
     def __init__(self, device=AUDIO_DEVICE, samplerate=AUDIO_RATE,
-                 blocksize=AUDIO_BLOCK, decim=AUDIO_DECIM, maxlen=AUDIO_POINTS):
+                 blocksize=AUDIO_BLOCK, chunk=AUDIO_ENV_CHUNK):
         self.device = device
         self.samplerate = samplerate
         self.blocksize = blocksize
-        self.decim = decim
-        self.buf = deque([0.0] * maxlen, maxlen=maxlen)
+        self.chunk = chunk
         self.stream = None
         self.running = False
 
@@ -236,6 +237,12 @@ class AudioCapture:
         self._wav_path = None
         self._wav_recording = False
         self._wav_lock = threading.Lock()
+
+        # time-stamped envelope for plotting (paused-excluded, sample-count clock)
+        self.env_t = []            # seconds since trial start (excludes pauses)
+        self.env_a = []            # peak amplitude in that window
+        self._rec_samples = 0
+        self._env_lock = threading.Lock()
 
     def start(self):
         try:
@@ -258,14 +265,28 @@ class AudioCapture:
 
     def _callback(self, indata, frames, time_info, status):
         # runs on PortAudio's thread; keep it cheap
-        self.buf.extend(indata[::self.decim, 0])
+        x = indata[:, 0]
         with self._wav_lock:
-            if self._wav is not None and self._wav_recording:
-                clipped = np.clip(indata[:, 0], -1.0, 1.0)
+            rec = self._wav is not None and self._wav_recording
+            if rec:
+                clipped = np.clip(x, -1.0, 1.0)
                 self._wav.writeframes((clipped * 32767.0).astype("<i2").tobytes())
+        if not rec:
+            return
+        # build the envelope (peak per chunk); time = recorded-sample count / rate
+        with self._env_lock:
+            n = x.shape[0]
+            for i in range(0, n, self.chunk):
+                seg = x[i:i + self.chunk]
+                if seg.size == 0:
+                    continue
+                self.env_t.append(self._rec_samples / self.samplerate)
+                self.env_a.append(float(np.max(np.abs(seg))))
+                self._rec_samples += seg.size
 
-    def get_waveform(self):
-        return list(self.buf)
+    def get_envelope(self):
+        with self._env_lock:
+            return list(self.env_t), list(self.env_a)
 
     # ---- WAV recording (Start/Pause/Resume/End mirror the EMG log) ----
     def start_recording(self, path):
@@ -279,6 +300,10 @@ class AudioCapture:
         except Exception as e:
             logging.error("❌ Failed to open WAV %s: %s", path, e)
             return False
+        with self._env_lock:
+            self.env_t = []
+            self.env_a = []
+            self._rec_samples = 0
         with self._wav_lock:
             self._wav = w
             self._wav_path = str(path)
@@ -501,8 +526,12 @@ class TrialLoggerApp(QtWidgets.QWidget):
         self.pv_c3 = deque(maxlen=PREVIEW_POINTS)
         self.pv_idx = 0
 
-        # completed trial labels {(object, num): QLabel}
+        # completed trial labels {(object, num): QPushButton}
         self.trial_labels = {}
+        # cached per-trial graph data {(object, num): {...}} for in-place review
+        self.trial_data = {}
+        self.review_key = None        # which trial is shown in-place (None = live)
+        self._review_video_path = None
 
         # ---- EMG source (real serial, or simulated flat lines for testing) ----
         if SIMULATE:
@@ -563,34 +592,27 @@ class TrialLoggerApp(QtWidgets.QWidget):
         obj_row.addWidget(self.object_edit, stretch=1)
         layout.addLayout(obj_row)
 
-        # ---- top row: live camera feed (left) + microphone waveform (right) ----
-        media_row = QtWidgets.QHBoxLayout()
-
+        # ---- live camera feed (on top) ----
         self.video_label = QtWidgets.QLabel("Camera starting…")
         self.video_label.setAlignment(QtCore.Qt.AlignCenter)
         self.video_label.setFixedSize(CAM_WIDTH, CAM_HEIGHT)   # keep video size fixed
         self.video_label.setStyleSheet("background-color: black; color: white;")
-        media_row.addWidget(self.video_label)
+        layout.addWidget(self.video_label, alignment=QtCore.Qt.AlignHCenter)
 
+        pg.setConfigOptions(antialias=False)
+
+        # ---- sound graph (on top of EMG, same size) ----
         self.audio_plot = pg.PlotWidget()
-        self.audio_plot.setFixedHeight(CAM_HEIGHT)             # same height as the video
         self.audio_plot.setBackground("w")
         self.audio_plot.setTitle("Microphone")
-        self.audio_plot.showGrid(x=False, y=True, alpha=0.2)
+        self.audio_plot.showGrid(x=True, y=True, alpha=0.2)
         self.audio_plot.setLabel("left", "Amplitude")
-        self.audio_plot.setYRange(-1.0, 1.0, padding=0)
-        self.audio_plot.getPlotItem().hideAxis("bottom")
-        self.audio_plot.setMouseEnabled(x=False, y=False)
+        self.audio_plot.getPlotItem().hideAxis("bottom")      # shares EMG's time axis below
+        self.audio_plot.setMouseEnabled(x=False, y=False)     # pan via the EMG plot
         self.audio_curve = self.audio_plot.plot([], [], pen=pg.mkPen("#9B59B6", width=1))
-        # fixed x, manual y (set per tick) -> no continuous auto-range recompute
-        self.audio_plot.setXRange(0, AUDIO_POINTS, padding=0)
-        self.audio_plot.disableAutoRange()
-        media_row.addWidget(self.audio_plot, stretch=1)        # fills space to the right
+        layout.addWidget(self.audio_plot, stretch=1)
 
-        layout.addLayout(media_row)
-
-        # ---- EMG plot ----
-        pg.setConfigOptions(antialias=False)
+        # ---- EMG plot (same size, below the sound graph) ----
         self.plot_widget = pg.PlotWidget()
         self.plot_widget.setBackground("w")
         self.plot_widget.showGrid(x=True, y=True, alpha=0.2)
@@ -603,12 +625,19 @@ class TrialLoggerApp(QtWidgets.QWidget):
         self.curve3 = self.plot_widget.plot([], [], pen=pg.mkPen("#3498DB", width=2), name="ch3")
         layout.addWidget(self.plot_widget, stretch=1)
 
+        # link the time axes so the two graphs pan/zoom together
+        self.audio_plot.setXLink(self.plot_widget)
+
         # ---- completed-trial labels row ----
         comp_box = QtWidgets.QHBoxLayout()
         comp_box.addWidget(QtWidgets.QLabel("Completed:"))
         self.labels_layout = QtWidgets.QHBoxLayout()
         comp_box.addLayout(self.labels_layout)
         comp_box.addStretch(1)
+        self.review_video_btn = QtWidgets.QPushButton("▶ Open trial video")
+        self.review_video_btn.setVisible(False)
+        self.review_video_btn.clicked.connect(self._open_review_video)
+        comp_box.addWidget(self.review_video_btn)
         layout.addLayout(comp_box)
 
         # ---- control buttons ----
@@ -635,6 +664,7 @@ class TrialLoggerApp(QtWidgets.QWidget):
     # Button handlers
     # ----------------------------------------------------------
     def on_trial_btn(self):
+        self._exit_review()
         if self.state == self.IDLE:
             self._start_logging()
         elif self.state == self.LOGGING:
@@ -647,14 +677,17 @@ class TrialLoggerApp(QtWidgets.QWidget):
             self._end_trial()
 
     def on_redo_btn(self):
+        self._exit_review()
         if self.state in (self.LOGGING, self.PAUSED, self.ENDED):
             self._redo_trial()
 
     def on_next_btn(self):
+        self._exit_review()
         if self.state == self.ENDED:
             self._reset_to_idle()   # next trial number is derived from the object
 
     def on_preview_btn(self):
+        self._exit_review()
         if self.preview_btn.isChecked():
             self._enter_preview()
         else:
@@ -705,6 +738,10 @@ class TrialLoggerApp(QtWidgets.QWidget):
         self.group_dir = self._folder_for_object(obj)
         self.current_obj = obj
         self.trial_num = self.object_counts.get(obj, 0) + 1
+
+        # follow live data on x; the linked sound graph follows too. Panning
+        # later (e.g. when stopped) disengages this and moves both together.
+        self.plot_widget.enableAutoRange(axis="x", enable=True)
 
         # start buffering samples for this trial (file is written on End)
         self.elapsed_ns = 0
@@ -797,18 +834,103 @@ class TrialLoggerApp(QtWidgets.QWidget):
         self.state = self.ENDED
         self.object_counts[self.current_obj] = self.trial_num
 
-        # add a label for this completed trial
-        lbl = QtWidgets.QLabel(f"{self.current_obj} Trial {self.trial_num} ✓")
-        lbl.setStyleSheet(
-            "border: 1px solid #27ae60; border-radius: 6px; padding: 2px 8px;"
-            "color: #27ae60; font-weight: bold;"
+        key = (self.current_obj, self.trial_num)
+
+        # cache this trial's graphs so the green box can reopen them instantly
+        et, ea = self.audio.get_envelope()
+        self.trial_data[key] = {
+            "title": f"{self.current_obj} Trial {self.trial_num}",
+            "emg": (list(self.t_buf), list(self.c1_buf), list(self.c2_buf), list(self.c3_buf)),
+            "audio": (et, ea),
+            "video": self.group_dir / f"video{self.trial_num}.avi",
+        }
+
+        # add a clickable label/button for this completed trial
+        btn = QtWidgets.QPushButton(f"{self.current_obj} Trial {self.trial_num} ✓")
+        btn.setCursor(QtCore.Qt.PointingHandCursor)
+        btn.setToolTip("Click to view this trial's graphs")
+        btn.setStyleSheet(
+            "QPushButton { border: 1px solid #27ae60; border-radius: 6px;"
+            " padding: 2px 8px; color: #27ae60; font-weight: bold; background: white; }"
+            "QPushButton:hover { background: #eafaf0; }"
         )
-        self.labels_layout.addWidget(lbl)
-        self.trial_labels[(self.current_obj, self.trial_num)] = lbl
+        btn.clicked.connect(lambda _=False, k=key: self._open_review(k))
+        self.labels_layout.addWidget(btn)
+        self.trial_labels[key] = btn
 
         logging.info("⏹️ %s Trial %d ended (%d samples).",
                      self.current_obj, self.trial_num, len(self.t_buf))
         self._update_controls()
+
+    def _open_review(self, key):
+        # clicking the active trial again returns to the live view
+        if self.review_key == key:
+            self._exit_review()
+        else:
+            self._enter_review(key)
+
+    def _enter_review(self, key):
+        data = self.trial_data.get(key)
+        if not data:
+            return
+        self.review_key = key
+
+        # draw the cached graphs in place of the live ones
+        t, c1, c2, c3 = data["emg"]
+        self.curve1.setData(t, c1)
+        self.curve2.setData(t, c2)
+        self.curve3.setData(t, c3)
+
+        et, ea = data["audio"]
+        if et:
+            self.audio_curve.setData(et, ea)
+            span = max(max(ea) * 1.2, AUDIO_MIN_SPAN)
+            self.audio_plot.setYRange(0.0, span, padding=0)
+        else:
+            self.audio_curve.setData([], [])
+
+        if t:
+            self.plot_widget.setXRange(t[0], t[-1], padding=0.02)
+
+        self._review_video_path = data.get("video")
+        has_video = bool(self._review_video_path and Path(self._review_video_path).exists())
+        self.review_video_btn.setVisible(has_video)
+
+        self._restyle_trial_buttons()
+        self.status_lbl.setText(
+            f"Reviewing {data['title']} — click the trial again to return to live"
+        )
+
+    def _exit_review(self):
+        if self.review_key is None:
+            return
+        self.review_key = None
+        self._review_video_path = None
+        self.review_video_btn.setVisible(False)
+        self._restyle_trial_buttons()
+        self._update_controls()      # restore the status line
+        self._refresh_plot()         # repaint the live view immediately
+
+    def _restyle_trial_buttons(self):
+        for k, btn in self.trial_labels.items():
+            if k == self.review_key:
+                btn.setStyleSheet(
+                    "QPushButton { border: 1px solid #27ae60; border-radius: 6px;"
+                    " padding: 2px 8px; color: white; font-weight: bold; background: #27ae60; }"
+                )
+            else:
+                btn.setStyleSheet(
+                    "QPushButton { border: 1px solid #27ae60; border-radius: 6px;"
+                    " padding: 2px 8px; color: #27ae60; font-weight: bold; background: white; }"
+                    "QPushButton:hover { background: #eafaf0; }"
+                )
+
+    def _open_review_video(self):
+        try:
+            if self._review_video_path:
+                os.startfile(str(self._review_video_path))   # Windows default player
+        except Exception as e:
+            logging.warning("⚠️ Could not open video: %s", e)
 
     def _redo_trial(self):
         # delete this trial's data and set up the SAME number again, stopped.
@@ -829,6 +951,9 @@ class TrialLoggerApp(QtWidgets.QWidget):
                     logging.info("🗑️ Deleted %s for redo.", path)
             except Exception as e:
                 logging.warning("⚠️ Could not delete %s: %s", path, e)
+
+        # forget the cached graphs for this trial
+        self.trial_data.pop((self.current_obj, self.trial_num), None)
 
         # remove the completed label if the trial had already ended
         lbl = self.trial_labels.pop((self.current_obj, self.trial_num), None)
@@ -905,21 +1030,23 @@ class TrialLoggerApp(QtWidgets.QWidget):
         # IDLE / PAUSED / ENDED -> sample ignored (not plotted, not logged)
 
     def _refresh_plot(self):
-        # microphone waveform: only shown while a trial is actively logging
-        # (blank when not started yet or paused)
-        if self.state == self.LOGGING:
-            wave = self.audio.get_waveform()
-            if wave:
-                # float64 avoids NumPy 2.x float32 cast-overflow warnings in pyqtgraph
-                y = np.asarray(wave, dtype=np.float64)
-                self.audio_curve.setData(y)
-                # auto-zoom: scale the y-range to the current peak so quiet mics
-                # still show clear spikes, with a floor to avoid zooming into noise
-                peak = float(np.nanmax(np.abs(y))) if y.size else 0.0
-                span = max(peak * 1.2, AUDIO_MIN_SPAN)
-                self.audio_plot.setYRange(-span, span, padding=0)
+        # while reviewing a past trial, the graphs are static — leave them be
+        if self.review_key is not None:
+            return
+
+        # sound graph: time-aligned envelope, shown during a trial (logging,
+        # paused) and after it ends so it scrolls with the EMG; blank otherwise
+        if self.state in (self.LOGGING, self.PAUSED, self.ENDED):
+            et, ea = self.audio.get_envelope()
+            if et:
+                self.audio_curve.setData(et, ea)
+                # auto-zoom Y to the peak so quiet mics still show clear spikes
+                span = max(max(ea) * 1.2, AUDIO_MIN_SPAN)
+                self.audio_plot.setYRange(0.0, span, padding=0)
+            else:
+                self.audio_curve.setData([], [])
         else:
-            self.audio_curve.setData([])
+            self.audio_curve.setData([], [])
 
         if self.state in (self.LOGGING, self.PAUSED, self.ENDED) and self.t_buf:
             self.curve1.setData(self.t_buf, self.c1_buf)
