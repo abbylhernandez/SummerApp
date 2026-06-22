@@ -20,3 +20,7 @@ We Are Going Home
 New Program: Realtime Testing (replaces the tera term step)
 - a python GUI that combines live emg graph, predictions (1s and 2s via UART) and video and voice (from video camera) (similar to FirstPhase,py)
 - "EMGliveviewer" records EMG prediction and video and synchronizes them, (but theres a better way to implement it)
+
+--
+
+unofficially a fork of https://github.com/mtinocomarin/fall_2026_exo_emg
