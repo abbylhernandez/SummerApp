@@ -35,16 +35,37 @@ class CameraCapture:
         self._rec_last_ns = None
 
     @staticmethod
-    def _detect_indices(limit=CAM_PROBE_MAX):
+    def _backend_for_current_os():
+        """Choose the OpenCV camera backend for the current OS. Windows = DirectShow, Linux = V4L2, Mac = AVFoundation."""
+        import platform
+        os_name = platform.system()
+        if os_name == "Windows":
+            return cv2.CAP_DSHOW
+        elif os_name == "Linux":
+            return cv2.CAP_V4L2
+        elif os_name == "Darwin":
+            return cv2.CAP_AVFOUNDATION
+        else:
+            logging.warning("⚠️ Unknown OS '%s'; using default OpenCV camera backend.", os_name)
+            return 0
+
+
+    def _detect_indices(self, limit=CAM_PROBE_MAX):
         """Return indices that actually deliver frames (DirectShow)."""
         found = []
+        backend = self._backend_for_current_os() #detect the backend for the current OS
+
         for i in range(limit):
-            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
-            if cap.isOpened():
-                ret, _ = cap.read()
-                if ret:
-                    found.append(i)
-            cap.release()
+            try: 
+                cap = cv2.VideoCapture(i, backend) 
+            
+                if cap.isOpened():
+                    ret, _ = cap.read()
+                    if ret:
+                        found.append(i)
+                cap.release()
+            except Exception:
+                continue # ignore any exceptions and keep probing
         return found
 
     def start(self):
@@ -55,7 +76,15 @@ class CameraCapture:
             self.cam_index = max(found) if found else 0
             logging.info("📷 Using camera index %s", self.cam_index)
 
-        self.cap = cv2.VideoCapture(self.cam_index, cv2.CAP_DSHOW)
+        backend = self._backend_for_current_os()
+
+        try:
+            #use the detected backend for the current OS to open the camera
+            self.cap = cv2.VideoCapture(self.cam_index, backend)
+        except Exception: 
+            #fallback to default backend if the specified one fails
+            self.cap = cv2.VideoCapture(self.cam_index)
+
         if not self.cap.isOpened():
             logging.error("❌ Failed to open camera index %s.", self.cam_index)
             return False
