@@ -13,13 +13,14 @@ BAUD_RATE       = 500000
 START_CMD       = b"z"              # 'z' = stream raw ADC (3 ch); 'c' adds prediction RX
 STOP_CMD        = b"v"              # byte sent to MCU to stop streaming
 
-CAM_INDEX       = 1                 # 1 = Logi C270 USB cam (0 = laptop built-in); None = auto
+CAM_INDEX       = 0                # 1 = Logi C270 USB cam (0 = laptop built-in); None = auto
 CAM_PROBE_MAX   = 4                 # how many indices to probe when auto-detecting
 CAM_WIDTH       = 640
 CAM_HEIGHT      = 360
 CAM_FPS         = 30
 
 AUDIO_DEVICE    = None              # mic input device (None = system default)
+AUDIO_PREFERRED_NAMES = ("MacBook", "Built-in Microphone", "Built-in Input")
 AUDIO_RATE      = 44100             # sample rate (Hz)
 AUDIO_BLOCK     = 1024              # samples per audio callback block
 AUDIO_ENV_CHUNK = 441               # samples per envelope point (~10 ms at 44.1 kHz)

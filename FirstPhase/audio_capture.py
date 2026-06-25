@@ -7,7 +7,7 @@ import threading
 import numpy as np
 import sounddevice as sd
 
-from config import AUDIO_DEVICE, AUDIO_RATE, AUDIO_BLOCK, AUDIO_ENV_CHUNK
+from config import AUDIO_DEVICE, AUDIO_PREFERRED_NAMES, AUDIO_RATE, AUDIO_BLOCK, AUDIO_ENV_CHUNK
 
 
 class AudioCapture:
@@ -38,6 +38,28 @@ class AudioCapture:
         self.env_a = []            # peak amplitude in that window
         self._rec_samples = 0
         self._env_lock = threading.Lock()
+
+    def _resolve_device(self):
+        """Use an explicit device if set; otherwise prefer the MacBook microphone."""
+        # if self.device is not None:
+        #     return self.device
+
+        try:
+            devices = sd.query_devices()
+        except Exception as e:
+            logging.warning("⚠️ Could not list audio devices; using default input: %s", e)
+            return None
+
+        for idx, dev in enumerate(devices):
+            if dev.get("max_input_channels", 0) <= 0:
+                continue
+            name = dev.get("name", "")
+            if any(preferred.lower() in name.lower() for preferred in AUDIO_PREFERRED_NAMES):
+                logging.info("🎤 Using microphone: %s (device %d)", name, idx)
+                return idx
+
+        logging.info("🎤 MacBook/built-in microphone not found; using default input.")
+        return None
 
     def start(self):
         try:
