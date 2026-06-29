@@ -38,8 +38,8 @@ def _unwrap_monotonic_ns(raw_ns):
 
 
 def _guess_button_path(emg_path):
-    base = os.path.basename(emg_path)
-    stem, _ = os.path.splitext(base)
+    base = os.path.basename(emg_path)       #holds the filename with extension
+    stem, _ = os.path.splitext(base)        #holds the filename without the extension
     if not stem.startswith("trial_"):
         return None
     try:
@@ -482,19 +482,22 @@ class EMGVideoViewer(QWidget):
         txt_files = glob.glob(os.path.join(folder, "trial_*.txt"))
         video_files = glob.glob(os.path.join(folder, "video_*.avi")) \
                     + glob.glob(os.path.join(folder, "trial_*.avi"))
+        audio_files = glob.glob(os.path.join(folder, "audio_*.csv")) \
+        + glob.glob(os.path.join(folder, "audio_*.wav"))
 
         def extract_num_generic(path):
             base = os.path.basename(path)
             name, _ = os.path.splitext(base)
-            for prefix in ("video_", "trial_"):
+            for prefix in ("video_", "trial_", "audio"):
                 if name.startswith(prefix):
                     return int(name[len(prefix):])
             raise ValueError(f"Unexpected filename format: {base}")
 
         txt_nums = {extract_num_generic(p): p for p in txt_files}
         vid_nums = {extract_num_generic(p): p for p in video_files}
+        audio_nums = {extract_num_generic(p): p for p in audio_files}
 
-        common = sorted(set(txt_nums) & set(vid_nums))
+        common = sorted(set(txt_nums) & set(vid_nums) & set(audio_nums))
         if not common:
             print("No more trials found.")
             self.timer.start(self.interval_ms)
@@ -519,10 +522,11 @@ class EMGVideoViewer(QWidget):
 
         new_emg_path = txt_nums[n]
         new_video_path = vid_nums[n]
-
+        new_audio_path = audio_nums[n]
         print(f"Loading trial {n}:")
         print("  EMG  :", new_emg_path)
         print("  Video:", new_video_path)
+        print("  Audio:", new_audio_path)
 
         new_times, new_data, new_button = load_emg_file(new_emg_path)
 
@@ -752,54 +756,73 @@ class EMGVideoViewer(QWidget):
 
 def main():
     # Ask for folder path
-    folder = input("Enter path to folder (e.g. ...\\finalemg\\set1\\act1): ").strip()
-    if not folder:
-        print("No folder given.")
-        return
-    if not os.path.isdir(folder):
-        print("Folder does not exist.")
-        return
+    #folder = input("Enter path to folder (e.g. ...\\finalemg\\set1\\act1): ").strip()
+
+    n = 1  # default trial number
+
+    folder = "trial_logs"
+
+    objects = {
+        "Apple",
+        "Lid",
+        "Bottle",
+        "Lid",
+        "Clip",
+    }
+
+    # if not folder:
+    #     print("No folder given.")
+    #     return
+    # if not os.path.isdir(folder):
+    #     print("Folder does not exist.")
+    #     return
 
     txt_files = glob.glob(os.path.join(folder, "trial_*.txt"))
 
     # accept both "video_*.avi" and "trial_*.avi" for videos
     video_files = glob.glob(os.path.join(folder, "video_*.avi")) \
                   + glob.glob(os.path.join(folder, "trial_*.avi"))
+    
+    # accept both "audio_*.csv" and "audio_*.wav" for audio files
+    audio_files = glob.glob(os.path.join(folder, "audio_*.csv")) \
+                  + glob.glob(os.path.join(folder, "audio_*.wav"))
 
     def extract_num_generic(path):
         base = os.path.basename(path)
         name, _ = os.path.splitext(base)
         # handle "video_3" or "trial_3"
-        for prefix in ("video_", "trial_"):
+        for prefix in ("video_", "trial_", "audio_"):
             if name.startswith(prefix):
                 return int(name[len(prefix):])
         raise ValueError(f"Unexpected filename format: {base}")
 
     txt_nums = {extract_num_generic(p): p for p in txt_files}
     vid_nums = {extract_num_generic(p): p for p in video_files}
+    audio_nums = {extract_num_generic(p): p for p in audio_files}
 
-    common_trials = sorted(set(txt_nums.keys()) & set(vid_nums.keys()))
+    common_trials = sorted(set(txt_nums.keys()) & set(vid_nums.keys()) & set(audio_nums.keys()))
     if not common_trials:
         print("No matching trial_X.txt and video_X.avi found.")
         return
 
-    print("Available trials:", common_trials)
-    while True:
-        try:
-            n = int(input("Which trial number do you want to view? "))
-        except ValueError:
-            print("Please enter a valid integer.")
-            continue
-        if n not in common_trials:
-            print("That trial does not exist. Choose one of:", common_trials)
-        else:
-            break
+    # print("Available trials:", common_trials)
+    # while True:
+    #     try:
+    #         n = int(input("Which trial number do you want to view? "))
+    #     except ValueError:
+    #         print("Please enter a valid integer.")
+    #         continue
+    #     if n not in common_trials:
+    #         print("That trial does not exist. Choose one of:", common_trials)
+    #     else:
+    #         break
 
     emg_path = txt_nums[n]
     video_path = vid_nums[n]
-
+    audio_path = audio_nums[n]
     print(f"Using EMG file:   {emg_path}")
     print(f"Using VIDEO file: {video_path}")
+    print(f"Using AUDIO file: {audio_path}")
 
     # Load EMG data
     emg_times, emg_data, button_data = load_emg_file(emg_path)

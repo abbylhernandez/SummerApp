@@ -41,8 +41,8 @@ class AudioCapture:
 
     def _resolve_device(self):
         """Use an explicit device if set; otherwise prefer the MacBook microphone."""
-        # if self.device is not None:
-        #     return self.device
+        if self.device is not None:
+            return self.device
 
         try:
             devices = sd.query_devices()
