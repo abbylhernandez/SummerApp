@@ -1,6 +1,7 @@
 import sys
 import os
 import glob
+import csv
 import cv2
 import numpy as np
 from datetime import datetime
@@ -16,6 +17,63 @@ import pyqtgraph as pg
 
 
 # ----------------------------- EMG LOADING ----------------------------------
+
+def extract_num_generic(path, prefixes):
+    base = os.path.basename(path)       #extract the file name from path input
+    name, _ = os.path.splitext(base)    #extract the name of the file and drops the extension
+
+    # This block extracts the trial number, supports the underscore style too
+    for prefix in prefixes:
+        if not name.startswith(prefix):
+            continue
+        suffix = name[len(prefix):]
+        if suffix.startswith("_"):
+            suffix = suffix[1:]
+        if suffix.isdigit():
+            return int(suffix)
+    raise ValueError(f"Unexpected filename format: {base}")
+
+
+def find_trials_in_folder(folder):
+    txt_files = glob.glob(os.path.join(folder, "trial*.txt"))
+    video_files = (
+        glob.glob(os.path.join(folder, "video*.avi"))
+        + glob.glob(os.path.join(folder, "trial*.avi"))
+    )
+    audio_files = (
+        glob.glob(os.path.join(folder, "audio*.csv"))
+        + glob.glob(os.path.join(folder, "audio*.wav"))
+    )
+
+    txt_nums = {extract_num_generic(p, ("trial",)): p for p in txt_files}
+    vid_nums = {extract_num_generic(p, ("video", "trial")): p for p in video_files}
+    audio_nums = {extract_num_generic(p, ("audio",)): p for p in audio_files}
+
+    common = sorted(set(txt_nums) & set(vid_nums) & set(audio_nums))
+    return [
+        {
+            "trial_num": n,
+            "folder": folder,
+            "emg_path": txt_nums[n],
+            "video_path": vid_nums[n],
+            "audio_path": audio_nums[n],
+        }
+        for n in common
+    ]
+
+
+def find_trials_under_root(root_folder):
+    session_folders = sorted(
+        path
+        for path in glob.glob(os.path.join(root_folder, "*"))
+        if os.path.isdir(path)
+    )
+
+    trials = []
+    for session_folder in session_folders:
+        trials.extend(find_trials_in_folder(session_folder))
+    return trials
+
 
 def _unwrap_monotonic_ns(raw_ns):
     """Unwrap signed 32-bit wraps into a monotonic int64 timeline."""
@@ -38,15 +96,16 @@ def _unwrap_monotonic_ns(raw_ns):
 
 
 def _guess_button_path(emg_path):
-    base = os.path.basename(emg_path)       #holds the filename with extension
-    stem, _ = os.path.splitext(base)        #holds the filename without the extension
-    if not stem.startswith("trial_"):
-        return None
     try:
-        trial_num = int(stem.replace("trial_", ""))
+        trial_num = extract_num_generic(emg_path, ("trial",))
     except ValueError:
         return None
-    return os.path.join(os.path.dirname(emg_path), f"button_{trial_num}.txt")
+    folder = os.path.dirname(emg_path)
+    for button_name in (f"button_{trial_num}.txt", f"button{trial_num}.txt"):
+        button_path = os.path.join(folder, button_name)
+        if os.path.exists(button_path):
+            return button_path
+    return os.path.join(folder, f"button_{trial_num}.txt")
 
 
 def _load_button_sidecar(button_path, emg_t_ns):
@@ -185,6 +244,46 @@ def load_emg_file(emg_path):
     return times_sec, emg, button
 
 
+def load_audio_file(audio_path):
+    """Load audio CSV data as relative seconds and amplitude."""
+    if not audio_path or not os.path.exists(audio_path):
+        return np.array([], dtype=float), np.array([], dtype=float)
+
+    if not audio_path.lower().endswith(".csv"):
+        print(f"Audio overlay currently supports CSV files only: {audio_path}")
+        return np.array([], dtype=float), np.array([], dtype=float)
+
+    times = []
+    amps = []
+    with open(audio_path, "r", newline="") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames and {"t_s", "amp"}.issubset(reader.fieldnames):
+            for row in reader:
+                try:
+                    times.append(float(row["t_s"]))
+                    amps.append(float(row["amp"]))
+                except (TypeError, ValueError):
+                    continue
+        else:
+            f.seek(0)
+            plain_reader = csv.reader(f)
+            for row in plain_reader:
+                if len(row) < 2:
+                    continue
+                try:
+                    times.append(float(row[0]))
+                    amps.append(float(row[1]))
+                except ValueError:
+                    continue
+
+    if not times:
+        return np.array([], dtype=float), np.array([], dtype=float)
+
+    times = np.asarray(times, dtype=float)
+    amps = np.asarray(amps, dtype=float)
+    return times - times[0], amps
+
+
 # ----------------------------- HELPER ---------------------------------------
 
 def format_time_from_seconds(s):
@@ -202,7 +301,16 @@ def format_time_from_seconds(s):
 class EMGVideoViewer(QWidget):
     PLAYBACK_SPEED = 1.0  # 1.0 = full speed
 
-    def __init__(self, video_path, emg_times, emg_data, button_data, emg_path, parent=None):
+    def __init__(
+        self,
+        video_path,
+        emg_times,
+        emg_data,
+        button_data,
+        emg_path,
+        audio_path=None,
+        parent=None,
+    ):
         super().__init__(parent)
 
         self.video_path = video_path
@@ -210,6 +318,8 @@ class EMGVideoViewer(QWidget):
         self.emg_data = emg_data         # shape (N, 3)
         self.button_data = button_data   # shape (N,), 0/1
         self.emg_path = emg_path         # full path to original EMG file
+        self.audio_path = audio_path
+        self.audio_times, self.audio_data = load_audio_file(self.audio_path)
         self.folder = os.path.dirname(self.emg_path)
 
         # how many acts we want to alternate between
@@ -255,9 +365,11 @@ class EMGVideoViewer(QWidget):
         self.curve_ch1 = self.plot_widget.plot(pen='r', name="ch1")
         self.curve_ch2 = self.plot_widget.plot(pen='g', name="ch2")
         self.curve_ch3 = self.plot_widget.plot(pen='b', name="ch3")
+        self._setup_audio_overlay()
 
         # Match video & EMG durations roughly
         self.plot_widget.setXRange(0, self.emg_times[-1], padding=0)
+        self._set_audio_y_range()
         self._build_button_regions()
 
         # ---- Clip controls (samples window) ----
@@ -307,6 +419,48 @@ class EMGVideoViewer(QWidget):
 
     def _playback_interval_ms(self):
         return max(1, int(round(1000 / (self.fps * self.PLAYBACK_SPEED))))
+
+    def _setup_audio_overlay(self):
+        self.audio_view = pg.ViewBox()
+        self.plot_widget.showAxis("right")
+        self.plot_widget.scene().addItem(self.audio_view)
+        self.plot_widget.getAxis("right").linkToView(self.audio_view)
+        self.plot_widget.getAxis("right").setLabel("Audio amp")
+        self.audio_view.setXLink(self.plot_widget)
+
+        audio_pen = pg.mkPen((255, 220, 0), width=2)
+        self.curve_audio = pg.PlotCurveItem(pen=audio_pen, name="audio")
+        self.audio_view.addItem(self.curve_audio)
+
+        self.plot_widget.getViewBox().sigResized.connect(self._sync_audio_view)
+        self._sync_audio_view()
+
+    def _sync_audio_view(self):
+        self.audio_view.setGeometry(self.plot_widget.getViewBox().sceneBoundingRect())
+        self.audio_view.linkedViewChanged(
+            self.plot_widget.getViewBox(),
+            self.audio_view.XAxis,
+        )
+
+    def _set_audio_y_range(self):
+        if len(self.audio_data) == 0:
+            self.curve_audio.clear()
+            return
+
+        finite_audio = self.audio_data[np.isfinite(self.audio_data)]
+        if len(finite_audio) == 0:
+            self.curve_audio.clear()
+            return
+
+        y_min = float(np.min(finite_audio))
+        y_max = float(np.max(finite_audio))
+        if y_min == y_max:
+            padding = abs(y_min) * 0.1 or 1.0
+            y_min -= padding
+            y_max += padding
+
+        self.audio_view.setYRange(y_min, y_max, padding=0.1)
+
     # ------------------------------------------------------------------
     def _clear_button_regions(self):
         for reg in self.button_regions:
@@ -479,25 +633,9 @@ class EMGVideoViewer(QWidget):
 
         folder = self.folder  # same folder as current EMG/Video
 
-        txt_files = glob.glob(os.path.join(folder, "trial_*.txt"))
-        video_files = glob.glob(os.path.join(folder, "video_*.avi")) \
-                    + glob.glob(os.path.join(folder, "trial_*.avi"))
-        audio_files = glob.glob(os.path.join(folder, "audio_*.csv")) \
-        + glob.glob(os.path.join(folder, "audio_*.wav"))
-
-        def extract_num_generic(path):
-            base = os.path.basename(path)
-            name, _ = os.path.splitext(base)
-            for prefix in ("video_", "trial_", "audio"):
-                if name.startswith(prefix):
-                    return int(name[len(prefix):])
-            raise ValueError(f"Unexpected filename format: {base}")
-
-        txt_nums = {extract_num_generic(p): p for p in txt_files}
-        vid_nums = {extract_num_generic(p): p for p in video_files}
-        audio_nums = {extract_num_generic(p): p for p in audio_files}
-
-        common = sorted(set(txt_nums) & set(vid_nums) & set(audio_nums))
+        trials = find_trials_in_folder(folder)
+        trials_by_num = {trial["trial_num"]: trial for trial in trials}
+        common = sorted(trials_by_num)
         if not common:
             print("No more trials found.")
             self.timer.start(self.interval_ms)
@@ -520,9 +658,10 @@ class EMGVideoViewer(QWidget):
             self.btn_play_pause.setText("Pause")
             return
 
-        new_emg_path = txt_nums[n]
-        new_video_path = vid_nums[n]
-        new_audio_path = audio_nums[n]
+        selected_trial = trials_by_num[n]
+        new_emg_path = selected_trial["emg_path"]
+        new_video_path = selected_trial["video_path"]
+        new_audio_path = selected_trial["audio_path"]
         print(f"Loading trial {n}:")
         print("  EMG  :", new_emg_path)
         print("  Video:", new_video_path)
@@ -534,6 +673,8 @@ class EMGVideoViewer(QWidget):
         self.emg_data = new_data
         self.button_data = new_button
         self.emg_path = new_emg_path
+        self.audio_path = new_audio_path
+        self.audio_times, self.audio_data = load_audio_file(self.audio_path)
         self.folder = os.path.dirname(self.emg_path)
 
         if len(self.emg_times) > 1:
@@ -544,6 +685,7 @@ class EMGVideoViewer(QWidget):
         self.curve_ch1.clear()
         self.curve_ch2.clear()
         self.curve_ch3.clear()
+        self.curve_audio.clear()
         self._clear_button_regions()
 
         if self.region is not None:
@@ -551,6 +693,7 @@ class EMGVideoViewer(QWidget):
             self.region = None
 
         self.plot_widget.setXRange(0, self.emg_times[-1], padding=0)
+        self._set_audio_y_range()
         self._build_button_regions()
 
         if self.cap is not None:
@@ -713,6 +856,7 @@ class EMGVideoViewer(QWidget):
         self.curve_ch1.clear()
         self.curve_ch2.clear()
         self.curve_ch3.clear()
+        self.curve_audio.clear()
 
         if self.is_paused:
             self.is_paused = False
@@ -751,75 +895,55 @@ class EMGVideoViewer(QWidget):
             self.curve_ch2.setData(t, y2)
             self.curve_ch3.setData(t, y3)
 
+        audio_idx = np.searchsorted(self.audio_times, current_time_sec, side="right")
+        if audio_idx > 0:
+            self.curve_audio.setData(
+                self.audio_times[:audio_idx],
+                self.audio_data[:audio_idx],
+            )
+
 
 # ----------------------------- MAIN SCRIPT ----------------------------------
 
 def main():
-    # Ask for folder path
-    #folder = input("Enter path to folder (e.g. ...\\finalemg\\set1\\act1): ").strip()
-
-    n = 1  # default trial number
-
-    folder = "trial_logs"
-
-    objects = {
-        "Apple",
-        "Lid",
-        "Bottle",
-        "Lid",
-        "Clip",
-    }
-
-    # if not folder:
-    #     print("No folder given.")
-    #     return
-    # if not os.path.isdir(folder):
-    #     print("Folder does not exist.")
-    #     return
-
-    txt_files = glob.glob(os.path.join(folder, "trial_*.txt"))
-
-    # accept both "video_*.avi" and "trial_*.avi" for videos
-    video_files = glob.glob(os.path.join(folder, "video_*.avi")) \
-                  + glob.glob(os.path.join(folder, "trial_*.avi"))
-    
-    # accept both "audio_*.csv" and "audio_*.wav" for audio files
-    audio_files = glob.glob(os.path.join(folder, "audio_*.csv")) \
-                  + glob.glob(os.path.join(folder, "audio_*.wav"))
-
-    def extract_num_generic(path):
-        base = os.path.basename(path)
-        name, _ = os.path.splitext(base)
-        # handle "video_3" or "trial_3"
-        for prefix in ("video_", "trial_", "audio_"):
-            if name.startswith(prefix):
-                return int(name[len(prefix):])
-        raise ValueError(f"Unexpected filename format: {base}")
-
-    txt_nums = {extract_num_generic(p): p for p in txt_files}
-    vid_nums = {extract_num_generic(p): p for p in video_files}
-    audio_nums = {extract_num_generic(p): p for p in audio_files}
-
-    common_trials = sorted(set(txt_nums.keys()) & set(vid_nums.keys()) & set(audio_nums.keys()))
-    if not common_trials:
-        print("No matching trial_X.txt and video_X.avi found.")
+    trial_logs_root = os.path.join("FirstPhase", "trial_logs")
+    if not os.path.isdir(trial_logs_root):
+        print(f"Folder does not exist: {trial_logs_root}")
         return
 
-    # print("Available trials:", common_trials)
-    # while True:
-    #     try:
-    #         n = int(input("Which trial number do you want to view? "))
-    #     except ValueError:
-    #         print("Please enter a valid integer.")
-    #         continue
-    #     if n not in common_trials:
-    #         print("That trial does not exist. Choose one of:", common_trials)
-    #     else:
-    #         break
+    trials = find_trials_under_root(trial_logs_root)
+    if not trials:
+        print(f"No matching trial/video/audio files found under {trial_logs_root}")
+        return
 
-    emg_path = txt_nums[n]
-    video_path = vid_nums[n]
-    audio_path = audio_nums[n]
+    # print("Available trials:")
+    # for index, trial in enumerate(trials, start=1):
+    #     folder_name = os.path.basename(trial["folder"])
+    #     print(f"{index}. {folder_name} - trial {trial['trial_num']}")
+
+    # try:
+    #     choice_text = input("Choose a trial to view [1]: ").strip()
+    # except EOFError:
+    #     choice_text = ""
+
+    # if choice_text:
+    #     try:
+    #         choice = int(choice_text)
+    #     except ValueError:
+    #         print("Please enter a valid number.")
+    #         return
+    # else:
+    #     choice = 1
+
+    # if choice < 1 or choice > len(trials):
+    #     print(f"Choose a number between 1 and {len(trials)}.")
+    #     return
+
+    selected_trial = trials[0]
+    n = selected_trial["trial_num"]
+    emg_path = selected_trial["emg_path"]
+    video_path = selected_trial["video_path"]
+    audio_path = selected_trial["audio_path"]
     print(f"Using EMG file:   {emg_path}")
     print(f"Using VIDEO file: {video_path}")
     print(f"Using AUDIO file: {audio_path}")
@@ -829,7 +953,7 @@ def main():
 
     # Run Qt app
     app = QApplication(sys.argv)
-    viewer = EMGVideoViewer(video_path, emg_times, emg_data, button_data, emg_path)
+    viewer = EMGVideoViewer(video_path, emg_times, emg_data, button_data, emg_path, audio_path)
     viewer.setWindowTitle(f"Trial {n} - EMG + Video")
     viewer.resize(900, 750)
     viewer.show()
