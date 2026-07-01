@@ -309,6 +309,8 @@ class EMGVideoViewer(QWidget):
         button_data,
         emg_path,
         audio_path=None,
+        available_trials=None,
+        current_trial_index=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -321,6 +323,13 @@ class EMGVideoViewer(QWidget):
         self.audio_path = audio_path
         self.audio_times, self.audio_data = load_audio_file(self.audio_path)
         self.folder = os.path.dirname(self.emg_path)
+        self.available_trials = (
+            list(available_trials) if available_trials is not None
+            else find_trials_in_folder(self.folder)
+        )
+        self.current_trial_index = current_trial_index
+        if self.current_trial_index is None:
+            self.current_trial_index = self._find_trial_index_by_emg_path(self.emg_path)
 
         # how many acts we want to alternate between
         self.num_acts = 2
@@ -416,6 +425,13 @@ class EMGVideoViewer(QWidget):
 
     # ------------------------------------------------------------------
     # Helpers: clip destinations (act1/act2, trial index)
+
+    def _find_trial_index_by_emg_path(self, emg_path):
+        target = os.path.abspath(emg_path)
+        for index, trial in enumerate(self.available_trials):
+            if os.path.abspath(trial["emg_path"]) == target:
+                return index
+        return None
 
     def _playback_interval_ms(self):
         return max(1, int(round(1000 / (self.fps * self.PLAYBACK_SPEED))))
@@ -624,41 +640,21 @@ class EMGVideoViewer(QWidget):
             f"{video_out_path}"
         )
 
+        return {
+            "act_idx": act_idx,
+            "trial_idx": trial_idx,
+            "emg_out_path": emg_out_path,
+            "video_out_path": video_out_path,
+        }
+
     # --------------- Clip window logic -----------------
-    def load_other_trial(self):
-        """Reload viewer with another trial in the same folder, reusing this window."""
+    def _load_trial(self, selected_trial):
+        """Reload viewer with a selected trial, reusing this window."""
         self.timer.stop()
         self.is_paused = True
         self.btn_play_pause.setText("Play")
 
-        folder = self.folder  # same folder as current EMG/Video
-
-        trials = find_trials_in_folder(folder)
-        trials_by_num = {trial["trial_num"]: trial for trial in trials}
-        common = sorted(trials_by_num)
-        if not common:
-            print("No more trials found.")
-            self.timer.start(self.interval_ms)
-            self.is_paused = False
-            self.btn_play_pause.setText("Pause")
-            return
-
-        n, ok = QInputDialog.getInt(
-            self,
-            "Load Trial",
-            f"Available trials: {common}\nEnter trial number:",
-            min(common),
-            min(common),
-            max(common),
-        )
-
-        if not ok or n not in common:
-            self.timer.start(self.interval_ms)
-            self.is_paused = False
-            self.btn_play_pause.setText("Pause")
-            return
-
-        selected_trial = trials_by_num[n]
+        n = selected_trial["trial_num"]
         new_emg_path = selected_trial["emg_path"]
         new_video_path = selected_trial["video_path"]
         new_audio_path = selected_trial["audio_path"]
@@ -722,6 +718,61 @@ class EMGVideoViewer(QWidget):
 
         # Update label in case emg_path changed
         self._update_next_dest_label()
+        self.current_trial_index = self._find_trial_index_by_emg_path(self.emg_path)
+        self.setWindowTitle(f"Trial {n} - EMG + Video")
+        return True
+
+    def load_next_trial(self):
+        """Load the next discovered trial after finishing act2."""
+        if self.current_trial_index is None:
+            self.current_trial_index = self._find_trial_index_by_emg_path(self.emg_path)
+
+        if self.current_trial_index is None:
+            print("Could not determine the current trial, so the next trial was not loaded.")
+            return False
+
+        next_index = self.current_trial_index + 1
+        if next_index >= len(self.available_trials):
+            print("No next trial found.")
+            return False
+
+        print("Act 2 clip saved. Loading next trial automatically.")
+        return self._load_trial(self.available_trials[next_index])
+
+    def load_other_trial(self):
+        """Reload viewer with another trial in the same folder, reusing this window."""
+        self.timer.stop()
+        self.is_paused = True
+        self.btn_play_pause.setText("Play")
+
+        folder = self.folder  # same folder as current EMG/Video
+
+        trials = find_trials_in_folder(folder)
+        trials_by_num = {trial["trial_num"]: trial for trial in trials}
+        common = sorted(trials_by_num)
+        if not common:
+            print("No more trials found.")
+            self.timer.start(self.interval_ms)
+            self.is_paused = False
+            self.btn_play_pause.setText("Pause")
+            return
+
+        n, ok = QInputDialog.getInt(
+            self,
+            "Load Trial",
+            f"Available trials: {common}\nEnter trial number:",
+            min(common),
+            min(common),
+            max(common),
+        )
+
+        if not ok or n not in common:
+            self.timer.start(self.interval_ms)
+            self.is_paused = False
+            self.btn_play_pause.setText("Pause")
+            return
+
+        self._load_trial(trials_by_num[n])
 
     def set_clip_window(self):
         """Create or update the highlighted window based on user sample input."""
@@ -795,7 +846,7 @@ class EMGVideoViewer(QWidget):
                 return
 
         # ------------ Save base clip exactly as before ------------
-        self._save_clip_to_root("ResultClip", idx)
+        base_save = self._save_clip_to_root("ResultClip", idx)
 
         # ------------ NEW: multiple sizes centered on same region ------------
         if self.clip_samples == 500:
@@ -834,8 +885,12 @@ class EMGVideoViewer(QWidget):
                 root_name = f"ResultClipSizeUp{n}"
                 self._save_clip_to_root(root_name, idx_n)
 
-        # Update label for next base clip destination
-        self._update_next_dest_label()
+        if base_save and base_save["act_idx"] == self.num_acts:
+            loaded_next = self.load_next_trial()
+            if not loaded_next:
+                self._update_next_dest_label()
+        else:
+            self._update_next_dest_label()
 
 
     # --------------- Playback controls -----------------
@@ -911,6 +966,7 @@ def main():
         print(f"Folder does not exist: {trial_logs_root}")
         return
 
+
     trials = find_trials_under_root(trial_logs_root)
     if not trials:
         print(f"No matching trial/video/audio files found under {trial_logs_root}")
@@ -939,7 +995,8 @@ def main():
     #     print(f"Choose a number between 1 and {len(trials)}.")
     #     return
 
-    selected_trial = trials[0]
+    selected_trial_index = 0
+    selected_trial = trials[selected_trial_index]
     n = selected_trial["trial_num"]
     emg_path = selected_trial["emg_path"]
     video_path = selected_trial["video_path"]
@@ -953,7 +1010,16 @@ def main():
 
     # Run Qt app
     app = QApplication(sys.argv)
-    viewer = EMGVideoViewer(video_path, emg_times, emg_data, button_data, emg_path, audio_path)
+    viewer = EMGVideoViewer(
+        video_path,
+        emg_times,
+        emg_data,
+        button_data,
+        emg_path,
+        audio_path,
+        available_trials=trials,
+        current_trial_index=selected_trial_index,
+    )
     viewer.setWindowTitle(f"Trial {n} - EMG + Video")
     viewer.resize(900, 750)
     viewer.show()
