@@ -52,6 +52,7 @@ def find_trials_in_folder(folder):
     common = sorted(set(txt_nums) & set(vid_nums) & set(audio_nums))
     return [
         {
+            "Data": None,
             "trial_num": n,
             "folder": folder,
             "emg_path": txt_nums[n],
@@ -62,17 +63,71 @@ def find_trials_in_folder(folder):
     ]
 
 
+def session_folder_timestamp(folder):
+    base = os.path.basename(folder)
+    timestamp_text = base[-22:]
+    try:
+        return datetime.strptime(timestamp_text, "%Y-%m-%d %I-%M-%S %p").timestamp()
+    except ValueError:
+        return os.path.getmtime(folder)
+
+
 def find_trials_under_root(root_folder):
     session_folders = sorted(
-        path
-        for path in glob.glob(os.path.join(root_folder, "*"))
-        if os.path.isdir(path)
+        (
+            path
+            for path in glob.glob(os.path.join(root_folder, "*"))
+            if os.path.isdir(path)
+        ),
+        key=session_folder_timestamp,
+        reverse=True,
     )
 
     trials = []
     for session_folder in session_folders:
         trials.extend(find_trials_in_folder(session_folder))
     return trials
+
+
+def compute_next_destination_for_root(result_root, num_acts=2):
+    """
+    Count existing clips under result_root/act1, act2, ...
+    Then alternate: act1/trial1, act2/trial1, act1/trial2, ...
+    """
+    total_clips = 0
+
+    if os.path.isdir(result_root):
+        for act_idx in range(1, num_acts + 1):
+            act_dir = os.path.join(result_root, f"act{act_idx}")
+            if not os.path.isdir(act_dir):
+                continue
+            existing_txt = glob.glob(os.path.join(act_dir, "trial_*.txt"))
+            total_clips += len(existing_txt)
+
+    act_idx = (total_clips % num_acts) + 1
+    trial_idx = (total_clips // num_acts) + 1
+    return act_idx, trial_idx
+
+
+def select_startup_trial_index(trials, num_acts=2):
+    """
+    Pick the raw trial whose number matches the next ResultClip destination.
+    This keeps the window title and save destination in sync after restarting.
+    """
+    folders = []
+    for trial in trials:
+        if trial["folder"] not in folders:
+            folders.append(trial["folder"])
+
+    for folder in folders:
+        result_root = os.path.join(folder, "ResultClip")
+        _, destination_trial_idx = compute_next_destination_for_root(result_root, num_acts)
+
+        for index, trial in enumerate(trials):
+            if trial["folder"] == folder and trial["trial_num"] == destination_trial_idx:
+                return index
+
+    return 0
 
 
 def _unwrap_monotonic_ns(raw_ns):
@@ -379,7 +434,7 @@ class EMGVideoViewer(QWidget):
         # Match video & EMG durations roughly
         self.plot_widget.setXRange(0, self.emg_times[-1], padding=0)
         self._set_audio_y_range()
-        self._build_button_regions()
+        #self._build_button_regions()
 
         # ---- Clip controls (samples window) ----
         clip_layout = QHBoxLayout()
@@ -486,63 +541,45 @@ class EMGVideoViewer(QWidget):
                 pass
         self.button_regions = []
 
-    def _build_button_regions(self):
-        self._clear_button_regions()
-        if len(self.emg_times) == 0 or len(self.button_data) == 0:
-            return
+    # def _build_button_regions(self):
+    #     self._clear_button_regions()
+    #     if len(self.emg_times) == 0 or len(self.button_data) == 0:
+    #         return
 
-        n = min(len(self.emg_times), len(self.button_data))
-        times = self.emg_times[:n]
-        button = np.asarray(self.button_data[:n], dtype=np.int8)
+    #     n = min(len(self.emg_times), len(self.button_data))
+    #     times = self.emg_times[:n]
+    #     button = np.asarray(self.button_data[:n], dtype=np.int8)
 
-        min_width = self.dt_mean if self.dt_mean > 0 else 0.01
-        i = 0
-        while i < n:
-            if button[i] != 1:
-                i += 1
-                continue
+    #     min_width = self.dt_mean if self.dt_mean > 0 else 0.01
+    #     i = 0
+    #     while i < n:
+    #         if button[i] != 1:
+    #             i += 1
+    #             continue
 
-            start_i = i
-            while i + 1 < n and button[i + 1] == 1:
-                i += 1
-            end_i = i
+    #         start_i = i
+    #         while i + 1 < n and button[i + 1] == 1:
+    #             i += 1
+    #         end_i = i
 
-            t0 = float(times[start_i])
-            t1 = float(times[end_i]) + min_width
-            if t1 <= t0:
-                t1 = t0 + min_width
+    #         t0 = float(times[start_i])
+    #         t1 = float(times[end_i]) + min_width
+    #         if t1 <= t0:
+    #             t1 = t0 + min_width
 
-            reg = pg.LinearRegionItem(
-                values=(t0, t1),
-                movable=False,
-                brush=(255, 0, 0, 35),
-                pen=(255, 0, 0, 110),
-            )
-            reg.setZValue(-20)
-            self.plot_widget.addItem(reg)
-            self.button_regions.append(reg)
-            i += 1
+    #         reg = pg.LinearRegionItem(
+    #             values=(t0, t1),
+    #             movable=False,
+    #             brush=(255, 0, 0, 35),
+    #             pen=(255, 0, 0, 110),
+    #         )
+    #         reg.setZValue(-20)
+    #         self.plot_widget.addItem(reg)
+    #         self.button_regions.append(reg)
+    #         i += 1
 
     def _compute_next_destination_for_root(self, result_root):
-        """
-        Same logic as before, but parameterized by result_root.
-        Count how many trial_*.txt exist under result_root/act1, act2, ...
-        Then alternate: act1/trial1, act2/trial1, act1/trial2, ...
-        """
-        num_acts = self.num_acts
-        total_clips = 0
-
-        if os.path.isdir(result_root):
-            for act_idx in range(1, num_acts + 1):
-                act_dir = os.path.join(result_root, f"act{act_idx}")
-                if not os.path.isdir(act_dir):
-                    continue
-                existing_txt = glob.glob(os.path.join(act_dir, "trial_*.txt"))
-                total_clips += len(existing_txt)
-
-        act_idx = (total_clips % num_acts) + 1
-        trial_idx = (total_clips // num_acts) + 1
-        return act_idx, trial_idx
+        return compute_next_destination_for_root(result_root, self.num_acts)
 
     def _compute_next_destination(self):
         """
@@ -690,7 +727,7 @@ class EMGVideoViewer(QWidget):
 
         self.plot_widget.setXRange(0, self.emg_times[-1], padding=0)
         self._set_audio_y_range()
-        self._build_button_regions()
+        #self._build_button_regions()
 
         if self.cap is not None:
             self.cap.release()
@@ -995,7 +1032,7 @@ def main():
     #     print(f"Choose a number between 1 and {len(trials)}.")
     #     return
 
-    selected_trial_index = 0
+    selected_trial_index = select_startup_trial_index(trials)
     selected_trial = trials[selected_trial_index]
     n = selected_trial["trial_num"]
     emg_path = selected_trial["emg_path"]
