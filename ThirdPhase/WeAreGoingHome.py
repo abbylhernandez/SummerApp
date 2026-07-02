@@ -1,5 +1,6 @@
 import ctypes
 import os
+import sys
 import array
 from pathlib import Path
 import logging
@@ -70,14 +71,19 @@ class trainclass:
 
         self.trial_feature_ranges = {}
 
-        # === Load DLL ===
-        dll_path = os.path.abspath("libfunctions.dll")
+        # === Load native C library ===
+        library_names = {
+            "darwin": "libfunctions.dylib",
+            "win32": "libfunctions.dll",
+        }
+        library_name = library_names.get(sys.platform, "libfunctions.so")
+        dll_path = Path(__file__).resolve().parent / library_name
         try:
-            self.lib = ctypes.CDLL(dll_path)
-            logger.info("Loaded DLL: %s", dll_path)
+            self.lib = ctypes.CDLL(str(dll_path))
+            logger.info("Loaded native library: %s", dll_path)
         except OSError as e:
             logger.warning(
-                "Could not load DLL at %s. Running without C functions. Error: %s",
+                "Could not load native library at %s. Running without C functions. Error: %s",
                 dll_path, e
             )
             self.lib = None
