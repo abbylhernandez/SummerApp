@@ -691,6 +691,8 @@ class EMGVideoViewer(QWidget):
         self.is_paused = True
         self.btn_play_pause.setText("Play")
 
+        self.load_audio = True
+
         n = selected_trial["trial_num"]
         new_emg_path = selected_trial["emg_path"]
         new_video_path = selected_trial["video_path"]
