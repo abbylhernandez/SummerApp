@@ -70,17 +70,34 @@ class trainclass:
 
         self.trial_feature_ranges = {}
 
-        # === Load DLL ===
-        dll_path = os.path.abspath("libfunctions.dll")
-        try:
-            self.lib = ctypes.CDLL(dll_path)
-            logger.info("Loaded DLL: %s", dll_path)
-        except OSError as e:
+        # === Load shared library ===
+        script_dir = Path(__file__).resolve().parent
+        candidates = [
+            script_dir / "libfunctions.dylib",
+            script_dir / "libfunctions.so",
+            script_dir / "libfunctions.dll",
+            Path.cwd() / "libfunctions.dylib",
+            Path.cwd() / "libfunctions.so",
+            Path.cwd() / "libfunctions.dll",
+        ]
+        lib_path = next((p for p in candidates if p.exists()), None)
+
+        if lib_path is None:
             logger.warning(
-                "Could not load DLL at %s. Running without C functions. Error: %s",
-                dll_path, e
+                "No libfunctions shared library found in %s or %s.",
+                script_dir, Path.cwd()
             )
             self.lib = None
+        else:
+            try:
+                self.lib = ctypes.CDLL(str(lib_path))
+                logger.info("Loaded library: %s", lib_path)
+            except OSError as e:
+                logger.warning(
+                    "Could not load library at %s. Running without C functions. Error: %s",
+                    lib_path, e
+                )
+                self.lib = None
 
         # === Function Signatures (only if DLL loaded) ===
         if self.lib is not None:
@@ -1638,7 +1655,7 @@ class trainclass:
 
 if __name__ == "__main__":
     train_obj = trainclass()
-    root_tabledata = r"C:\Users\mtino\OneDrive\Desktop\ResearchCode\Application5\set1final"
+    root_tabledata = r"/Users/jaylanngin/EMGtesting/SummerApp/FirstPhase/trial_logs/ObjectData-2026-07-02 10-30-22 AM"
 
     for prune in range(1, 15):  # 1..14
         print(f"\n\n=== Running prune_trials={prune} ===\n")

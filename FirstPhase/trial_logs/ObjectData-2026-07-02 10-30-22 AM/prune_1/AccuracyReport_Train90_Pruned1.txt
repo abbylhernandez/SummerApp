@@ -1,0 +1,9 @@
+============================================================
+PRUNE REPORT  (Train 80% / Test 20%)
+Prune trials per label   : 1
+Root folder (original)   : /Users/jaylanngin/EMGtesting/SummerApp/FirstPhase/trial_logs/ObjectData-2026-07-02 10-30-22 AM
+Prune root (output sets) : /Users/jaylanngin/EMGtesting/SummerApp/FirstPhase/trial_logs/ObjectData-2026-07-02 10-30-22 AM/prune_1
+Only sample sizes <= 1100 are used.
+============================================================
+SampleSize	BaseTrain(%)	BaseTest(%)	PrunedTrain(%)	PrunedTest(%)
+
