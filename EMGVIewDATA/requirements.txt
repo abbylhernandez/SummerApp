@@ -1,0 +1,8 @@
+opencv-python
+Pillow
+matplotlib
+pandas
+numpy
+sounddevice
+imageio-ffmpeg
+
