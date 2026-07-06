@@ -7,7 +7,7 @@ import numpy as np
 from datetime import datetime
 
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QLabel, QVBoxLayout,
+    QApplication, QCheckBox, QWidget, QLabel, QVBoxLayout,
     QPushButton, QHBoxLayout, QLineEdit, QInputDialog
 )
 from PyQt5.QtGui import QImage, QPixmap
@@ -472,6 +472,14 @@ class EMGVideoViewer(QWidget):
         layout.addWidget(self.btn_load_other)
         self.btn_load_other.clicked.connect(self.load_other_trial)
 
+        # ---- Audio overlay toggle button ----
+        checkbox_layout = QHBoxLayout()
+        self.audio_overlay = QCheckBox("Toggle Audio Overlay")
+        self.audio_overlay.stateChanged.connect(self.toggle_audio_overlay)  
+        self.audio_overlay.setChecked(True)     #default to showing audio overlay
+        checkbox_layout.addWidget(self.audio_overlay)
+        layout.addLayout(checkbox_layout)
+
         # Timer for video/plot updates
         self.timer = QTimer(self)
         self.interval_ms = self._playback_interval_ms()
@@ -490,7 +498,13 @@ class EMGVideoViewer(QWidget):
 
     def _playback_interval_ms(self):
         return max(1, int(round(1000 / (self.fps * self.PLAYBACK_SPEED))))
-
+    
+    def toggle_audio_overlay(self, state):
+        if state == Qt.Checked:
+            self.audio_view.setVisible(True)
+        else:
+            self.audio_view.setVisible(False)
+    
     def _setup_audio_overlay(self):
         self.audio_view = pg.ViewBox()
         self.plot_widget.showAxis("right")
@@ -690,8 +704,6 @@ class EMGVideoViewer(QWidget):
         self.timer.stop()
         self.is_paused = True
         self.btn_play_pause.setText("Play")
-
-        self.load_audio = True
 
         n = selected_trial["trial_num"]
         new_emg_path = selected_trial["emg_path"]
@@ -1010,29 +1022,6 @@ def main():
     if not trials:
         print(f"No matching trial/video/audio files found under {trial_logs_root}")
         return
-
-    # print("Available trials:")
-    # for index, trial in enumerate(trials, start=1):
-    #     folder_name = os.path.basename(trial["folder"])
-    #     print(f"{index}. {folder_name} - trial {trial['trial_num']}")
-
-    # try:
-    #     choice_text = input("Choose a trial to view [1]: ").strip()
-    # except EOFError:
-    #     choice_text = ""
-
-    # if choice_text:
-    #     try:
-    #         choice = int(choice_text)
-    #     except ValueError:
-    #         print("Please enter a valid number.")
-    #         return
-    # else:
-    #     choice = 1
-
-    # if choice < 1 or choice > len(trials):
-    #     print(f"Choose a number between 1 and {len(trials)}.")
-    #     return
 
     selected_trial_index = select_startup_trial_index(trials)
     selected_trial = trials[selected_trial_index]
