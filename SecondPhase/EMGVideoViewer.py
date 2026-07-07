@@ -2,6 +2,11 @@ import sys
 import os
 import glob
 import csv
+import time
+import wave
+import tempfile
+import subprocess
+import threading
 import cv2
 import numpy as np
 from datetime import datetime
@@ -14,6 +19,68 @@ from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import QTimer, Qt
 
 import pyqtgraph as pg
+
+# Optional audio playback (extract the video's embedded audio track and play it).
+try:
+    import sounddevice as sd
+    import imageio_ffmpeg
+    AUDIO_OK = True
+except Exception:
+    AUDIO_OK = False
+
+
+class _AudioStreamPlayer:
+    """Plays a mono int16 buffer and reports the actual (latency-corrected)
+    playback position, so the video/cursor can follow the audio as the clock."""
+
+    def __init__(self, data, rate):
+        self.data = data
+        self.rate = rate
+        self.pos = 0
+        self.out_latency = 0.0
+        self.stream = None
+        self._lock = threading.Lock()
+
+    def _cb(self, outdata, frames, time_info, status):
+        with self._lock:
+            start = self.pos
+            end = min(start + frames, len(self.data))
+            self.pos = end
+        n = end - start
+        if n > 0:
+            outdata[:n, 0] = self.data[start:end]
+        if n < frames:
+            outdata[n:, 0] = 0
+            raise sd.CallbackStop
+
+    def start(self, start_sample):
+        self.stop()
+        with self._lock:
+            self.pos = max(0, min(int(start_sample), len(self.data)))
+        self.stream = sd.OutputStream(samplerate=self.rate, channels=1,
+                                      dtype="int16", callback=self._cb)
+        self.stream.start()
+        try:
+            self.out_latency = float(self.stream.latency)
+        except Exception:
+            self.out_latency = 0.0
+
+    def active(self):
+        return self.stream is not None and self.stream.active
+
+    def position_s(self):
+        with self._lock:
+            pos = self.pos
+        return max(0.0, pos / self.rate - self.out_latency)
+
+    def stop(self):
+        if self.stream is not None:
+            try:
+                self.stream.stop()
+                self.stream.close()
+            except Exception:
+                pass
+            self.stream = None
 
 
 # ----------------------------- EMG LOADING ----------------------------------
@@ -401,6 +468,15 @@ class EMGVideoViewer(QWidget):
         self.frame_idx = 0
         self.is_paused = False
 
+        # Audio track (extracted from the video) for synced playback.
+        self.audio_samples = None
+        self.audio_rate = None
+        self.audio_player = None
+        self.audio_master = False   # True when audio drives the playback clock
+        self._play_t0 = 0.0
+        self._play_t_origin = 0.0
+        self._extract_audio()
+
         # For clipping window
         self.clip_samples = None
         self.region = None
@@ -472,11 +548,14 @@ class EMGVideoViewer(QWidget):
         layout.addWidget(self.btn_load_other)
         self.btn_load_other.clicked.connect(self.load_other_trial)
 
-        # Timer for video/plot updates
+        # Timer for video/plot updates. The tick is intentionally faster than
+        # the frame interval: each tick we compute where we *should* be from the
+        # playback clock (the audio position at 1x) and skip forward to the
+        # matching frame, so audio and video stay in sync.
         self.timer = QTimer(self)
         self.interval_ms = self._playback_interval_ms()
         self.timer.timeout.connect(self._update_frame)
-        self.timer.start(self.interval_ms)
+        self._begin_playback()
 
     # ------------------------------------------------------------------
     # Helpers: clip destinations (act1/act2, trial index)
@@ -490,6 +569,67 @@ class EMGVideoViewer(QWidget):
 
     def _playback_interval_ms(self):
         return max(1, int(round(1000 / (self.fps * self.PLAYBACK_SPEED))))
+
+    # ------------------------------------------------------------------
+    # Audio playback (extracted from the video's embedded track)
+
+    def _extract_audio(self):
+        """Pull the video's audio track into memory (mono int16) via ffmpeg."""
+        self.audio_samples = None
+        self.audio_rate = None
+        self.audio_player = None
+        if not AUDIO_OK or not self.video_path:
+            return
+        try:
+            ff = imageio_ffmpeg.get_ffmpeg_exe()
+            tmp = tempfile.mktemp(suffix=".wav")
+            cmd = [ff, "-y", "-i", self.video_path,
+                   "-vn", "-ac", "1", "-ar", "44100", "-f", "wav", tmp]
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, creationflags=flags)
+            wf = wave.open(tmp, "rb")
+            self.audio_rate = wf.getframerate()
+            frames = wf.readframes(wf.getnframes())
+            wf.close()
+            os.remove(tmp)
+            samples = np.frombuffer(frames, dtype=np.int16)
+            if samples.size > 0:
+                self.audio_samples = samples
+                self.audio_player = _AudioStreamPlayer(samples, self.audio_rate)
+        except Exception as e:
+            print(f"Audio playback unavailable for {self.video_path}: {e}")
+            self.audio_samples = None
+            self.audio_rate = None
+            self.audio_player = None
+
+    def _start_audio(self, t_s):
+        # Only play at 1x; other speeds would change pitch / break sync.
+        if self.audio_player is None or abs(self.PLAYBACK_SPEED - 1.0) > 1e-6:
+            return
+        try:
+            self.audio_player.start(int(t_s * self.audio_rate))
+        except Exception:
+            pass
+
+    def _stop_audio(self):
+        if self.audio_player is not None:
+            self.audio_player.stop()
+
+    def _begin_playback(self):
+        """(Re)start playback from the current frame. At 1x the audio is the
+        master clock so the video and graphs follow the audio's true position
+        (staying in sync despite output latency); otherwise a wall clock is
+        used and audio is muted."""
+        self.is_paused = False
+        self.btn_play_pause.setText("Pause")
+        self._play_t0 = time.perf_counter()
+        self._play_t_origin = self.frame_idx / self.fps
+        self.audio_master = (
+            abs(self.PLAYBACK_SPEED - 1.0) < 1e-6 and self.audio_player is not None
+        )
+        self._start_audio(self._play_t_origin)
+        self.timer.start(self.interval_ms)
 
     def _setup_audio_overlay(self):
         self.audio_view = pg.ViewBox()
@@ -688,6 +828,7 @@ class EMGVideoViewer(QWidget):
     def _load_trial(self, selected_trial):
         """Reload viewer with a selected trial, reusing this window."""
         self.timer.stop()
+        self._stop_audio()
         self.is_paused = True
         self.btn_play_pause.setText("Play")
 
@@ -744,12 +885,13 @@ class EMGVideoViewer(QWidget):
         if self.fps <= 0:
             self.fps = 30.0
 
+        # Pull the new video's embedded audio track for synced playback.
+        self._extract_audio()
+
         self.interval_ms = self._playback_interval_ms()
         self.frame_idx = 0
 
-        self.is_paused = False
-        self.btn_play_pause.setText("Pause")
-        self.timer.start(self.interval_ms)
+        self._begin_playback()
 
         if self.clip_samples is not None:
             self.samples_input.setText(str(self.clip_samples))
@@ -781,6 +923,7 @@ class EMGVideoViewer(QWidget):
     def load_other_trial(self):
         """Reload viewer with another trial in the same folder, reusing this window."""
         self.timer.stop()
+        self._stop_audio()
         self.is_paused = True
         self.btn_play_pause.setText("Play")
 
@@ -791,9 +934,7 @@ class EMGVideoViewer(QWidget):
         common = sorted(trials_by_num)
         if not common:
             print("No more trials found.")
-            self.timer.start(self.interval_ms)
-            self.is_paused = False
-            self.btn_play_pause.setText("Pause")
+            self._begin_playback()
             return
 
         n, ok = QInputDialog.getInt(
@@ -806,9 +947,7 @@ class EMGVideoViewer(QWidget):
         )
 
         if not ok or n not in common:
-            self.timer.start(self.interval_ms)
-            self.is_paused = False
-            self.btn_play_pause.setText("Pause")
+            self._begin_playback()
             return
 
         self._load_trial(trials_by_num[n])
@@ -935,15 +1074,17 @@ class EMGVideoViewer(QWidget):
     # --------------- Playback controls -----------------
     def toggle_play_pause(self):
         if self.is_paused:
-            self.timer.start(self.interval_ms)
-            self.is_paused = False
-            self.btn_play_pause.setText("Pause")
+            # Resume from the current frame, restarting the clock + audio.
+            self._begin_playback()
         else:
             self.timer.stop()
+            self._stop_audio()
             self.is_paused = True
             self.btn_play_pause.setText("Play")
 
     def replay(self):
+        self.timer.stop()
+        self._stop_audio()
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         self.frame_idx = 0
 
@@ -952,23 +1093,40 @@ class EMGVideoViewer(QWidget):
         self.curve_ch3.clear()
         self.curve_audio.clear()
 
-        if self.is_paused:
-            self.is_paused = False
-            self.btn_play_pause.setText("Pause")
-        self.timer.start(self.interval_ms)
+        self._begin_playback()
 
     # --------------- Frame update ----------------------
     def _update_frame(self):
-        ret, frame = self.cap.read()
-        if not ret:
-            self.timer.stop()
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            self.frame_idx = 0
-            self.is_paused = True
-            self.btn_play_pause.setText("Play")
+        # Where we should be on the timeline right now. At 1x follow the real
+        # audio position so audio and video stay locked together; otherwise use
+        # a wall clock scaled by the playback speed.
+        if self.audio_master and self.audio_player is not None and self.audio_player.active():
+            target_t = self.audio_player.position_s()
+        else:
+            elapsed = time.perf_counter() - self._play_t0
+            target_t = self._play_t_origin + elapsed * self.PLAYBACK_SPEED
+
+        target_frame = max(0, int(round(target_t * self.fps)))
+
+        # Read forward to the target frame; dropping intermediate frames keeps
+        # timing correct even if decode/draw falls behind.
+        frame = None
+        while self.frame_idx <= target_frame:
+            ret, f = self.cap.read()
+            if not ret:
+                self.timer.stop()
+                self._stop_audio()
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                self.frame_idx = 0
+                self.is_paused = True
+                self.btn_play_pause.setText("Play")
+                return
+            frame = f
+            self.frame_idx += 1
+
+        if frame is None:
             return
 
-        self.frame_idx += 1
         current_time_sec = self.frame_idx / self.fps
 
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -995,6 +1153,14 @@ class EMGVideoViewer(QWidget):
                 self.audio_times[:audio_idx],
                 self.audio_data[:audio_idx],
             )
+
+    # --------------- Cleanup ---------------------------
+    def closeEvent(self, event):
+        self.timer.stop()
+        self._stop_audio()
+        if self.cap is not None:
+            self.cap.release()
+        super().closeEvent(event)
 
 
 # ----------------------------- MAIN SCRIPT ----------------------------------
