@@ -472,15 +472,10 @@ class EMGVideoViewer(QWidget):
         layout.addWidget(self.btn_load_other)
         self.btn_load_other.clicked.connect(self.load_other_trial)
 
-        # ---- Audio overlay toggle button ----
-        checkbox_layout = QHBoxLayout()
-        self.audio_overlay = QCheckBox("Toggle Audio Overlay")
-        self.audio_overlay.stateChanged.connect(self.toggle_audio_overlay)  
-        self.audio_overlay.setChecked(True)     #default to showing audio overlay
-        checkbox_layout.addWidget(self.audio_overlay)
-        layout.addLayout(checkbox_layout)
-
-        # Timer for video/plot updates
+        # Timer for video/plot updates. The tick is intentionally faster than
+        # the frame interval: each tick we compute where we *should* be from the
+        # playback clock (the audio position at 1x) and skip forward to the
+        # matching frame, so audio and video stay in sync.
         self.timer = QTimer(self)
         self.interval_ms = self._playback_interval_ms()
         self.timer.timeout.connect(self._update_frame)
@@ -498,13 +493,68 @@ class EMGVideoViewer(QWidget):
 
     def _playback_interval_ms(self):
         return max(1, int(round(1000 / (self.fps * self.PLAYBACK_SPEED))))
-    
-    def toggle_audio_overlay(self, state):
-        if state == Qt.Checked:
-            self.audio_view.setVisible(True)
-        else:
-            self.audio_view.setVisible(False)
-    
+
+    # ------------------------------------------------------------------
+    # Audio playback (extracted from the video's embedded track)
+
+    def _extract_audio(self):
+        """Pull the video's audio track into memory (mono int16) via ffmpeg."""
+        self.audio_samples = None
+        self.audio_rate = None
+        self.audio_player = None
+        if not AUDIO_OK or not self.video_path:
+            return
+        try:
+            ff = imageio_ffmpeg.get_ffmpeg_exe()
+            tmp = tempfile.mktemp(suffix=".wav")
+            cmd = [ff, "-y", "-i", self.video_path,
+                   "-vn", "-ac", "1", "-ar", "44100", "-f", "wav", tmp]
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, creationflags=flags)
+            wf = wave.open(tmp, "rb")
+            self.audio_rate = wf.getframerate()
+            frames = wf.readframes(wf.getnframes())
+            wf.close()
+            os.remove(tmp)
+            samples = np.frombuffer(frames, dtype=np.int16)
+            if samples.size > 0:
+                self.audio_samples = samples
+                self.audio_player = _AudioStreamPlayer(samples, self.audio_rate)
+        except Exception as e:
+            print(f"Audio playback unavailable for {self.video_path}: {e}")
+            self.audio_samples = None
+            self.audio_rate = None
+            self.audio_player = None
+
+    def _start_audio(self, t_s):
+        # Only play at 1x; other speeds would change pitch / break sync.
+        if self.audio_player is None or abs(self.PLAYBACK_SPEED - 1.0) > 1e-6:
+            return
+        try:
+            self.audio_player.start(int(t_s * self.audio_rate))
+        except Exception:
+            pass
+
+    def _stop_audio(self):
+        if self.audio_player is not None:
+            self.audio_player.stop()
+
+    def _begin_playback(self):
+        """(Re)start playback from the current frame. At 1x the audio is the
+        master clock so the video and graphs follow the audio's true position
+        (staying in sync despite output latency); otherwise a wall clock is
+        used and audio is muted."""
+        self.is_paused = False
+        self.btn_play_pause.setText("Pause")
+        self._play_t0 = time.perf_counter()
+        self._play_t_origin = self.frame_idx / self.fps
+        self.audio_master = (
+            abs(self.PLAYBACK_SPEED - 1.0) < 1e-6 and self.audio_player is not None
+        )
+        self._start_audio(self._play_t_origin)
+        self.timer.start(self.interval_ms)
+
     def _setup_audio_overlay(self):
         self.audio_view = pg.ViewBox()
         self.plot_widget.showAxis("right")
