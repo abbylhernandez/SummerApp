@@ -13,8 +13,8 @@
 #define DLL_EXPORT
 #endif
 
-int Choleski_LU_Decomposition(float *A, int n);
-int Choleski_LU_Solve(float *LU, float B[], float x[], int n);
+DLL_EXPORT int Choleski_LU_Decomposition(float *A, int n);
+DLL_EXPORT int Choleski_LU_Solve(float *LU, float B[], float x[], int n);
 
 /*  Matrix Multiply
     C=A*B
@@ -22,7 +22,7 @@ int Choleski_LU_Solve(float *LU, float B[], float x[], int n);
     B:(an x bn)
     C:(am x bn)
 */
-void mulAB(float *A,float *B,float *C,int am,int an,int bn)
+DLL_EXPORT void mulAB(float *A,float *B,float *C,int am,int an,int bn)
 {
     int i,j,l,u;
 
@@ -40,7 +40,7 @@ void mulAB(float *A,float *B,float *C,int am,int an,int bn)
     C=A+B
     A,B,C:(m x n)
 */
-void addition(float *A,float *B,float *C, int m,int n)
+DLL_EXPORT void addition(float *A,float *B,float *C, int m,int n)
 {
     int i,j;
 
@@ -328,15 +328,16 @@ DLL_EXPORT void feature_normalization(float *features, float * xmean, float * xs
                                       int num, int feature_dim)
 {
 	int j,m;
-	//float *tmp;
-	//float *tmp1;
-	float *xstd_mean;
-	//int test_pro;
 	float sum=0.0;
 	float xstd_sum=0.0;
+	float diff;
+	float var;
 
-
-	xstd_mean=(float*)malloc(1*feature_dim*sizeof(float));
+	if (num <= 0 || feature_dim <= 0) {
+		printf("feature_normalization: invalid sizes (num=%d, feature_dim=%d)\n",
+		       num, feature_dim);
+		return;
+	}
 
 	for(m=0;m<feature_dim;m++)
     {
@@ -347,25 +348,31 @@ DLL_EXPORT void feature_normalization(float *features, float * xmean, float * xs
             sum+=features[m+feature_dim*j];
         }
         xmean[m]=sum/num;
+        printf("sum[%d]: %f\n", m, sum);
 
 		for(j=0;j<num;j++)
         {
-            features[m+feature_dim*j]=features[m+feature_dim*j]-xmean[m];
-			xstd_sum+=features[m+feature_dim*j]*features[m+feature_dim*j];
+            diff=features[m+feature_dim*j]-xmean[m];
+            features[m+feature_dim*j]=diff;
+			xstd_sum+=diff*diff;
         }
-		xstd_mean[m]=(num > 1) ? xstd_sum/(num-1) : 0.0f;
-		xstd[m]=(float)sqrt(xstd_mean[m]);
-        if (xstd[m] == 0.0f) {
-            xstd[m] = 1.0f;
-        }
+
+		if (num > 1) {
+			var = xstd_sum/(num-1);
+			if (var > 0.0f) {
+				xstd[m] = sqrtf(var);
+			} else {
+				xstd[m] = 1.0f;
+			}
+		} else {
+			xstd[m] = 1.0f;
+		}
 
 		for(j=0;j<num;j++)
         {
             features[m+feature_dim*j]=features[m+feature_dim*j]/xstd[m];
         }
     }
-
-	free(xstd_mean);
 
 	return;
 }
@@ -378,7 +385,7 @@ DLL_EXPORT void feature_normalization(float *features, float * xmean, float * xs
     Output:
         features: the normalized feature vector
 */
-void feature_normalization_apply(float *features, float * xmean, float * xstd, int feature_dim)
+DLL_EXPORT void feature_normalization_apply(float *features, float * xmean, float * xstd, int feature_dim)
 {
 	int m;
 
@@ -454,109 +461,91 @@ DLL_EXPORT void LDA_train(float *features, int *classes, float *Wg, float *Cg,
                           int win_per_trial, int trial_per_class)
 {
     int i, j, c;
-    int num_samples = num_class * win_per_trial * trial_per_class;
-    float *means = (float*)calloc(num_class * feature_dim, sizeof(float));
-    float *pooled_cov = (float*)calloc(feature_dim * feature_dim, sizeof(float));
-    float *lu = (float*)malloc(feature_dim * feature_dim * sizeof(float));
-    float *rhs = (float*)malloc(feature_dim * sizeof(float));
-    float *solution = (float*)malloc(feature_dim * sizeof(float));
-    int *counts = (int*)calloc(num_class, sizeof(int));
-    float regularization = 1.0e-5f;
-    int decomp_status;
+    int samples_per_class = win_per_trial * trial_per_class;
 
-    if (!means || !pooled_cov || !lu || !rhs || !solution || !counts || num_samples <= 0) {
-        goto cleanup;
+    /* Feature layout is class-contiguous: class c occupies the block of
+       samples_per_class rows starting at c*samples_per_class. The explicit
+       class labels are therefore not needed here. */
+    (void)classes;
+
+    float *class_data = (float*)malloc(feature_dim * samples_per_class * sizeof(float));
+    float *class_cov  = (float*)malloc(feature_dim * feature_dim * sizeof(float));
+    float *pooled_cov = (float*)malloc(feature_dim * feature_dim * sizeof(float));
+    float *means      = (float*)malloc(feature_dim * num_class * sizeof(float));
+    float *lu         = (float*)malloc(feature_dim * feature_dim * sizeof(float));
+    float *rhs        = (float*)malloc(feature_dim * sizeof(float));
+    float *solution   = (float*)malloc(feature_dim * sizeof(float));
+    float *quad       = (float*)malloc(sizeof(float));
+
+    if (!class_data || !class_cov || !pooled_cov || !means ||
+        !lu || !rhs || !solution || !quad) {
+        puts("LDA_train: malloc failed");
+        free(class_data);
+        free(class_cov);
+        free(pooled_cov);
+        free(means);
+        free(lu);
+        free(rhs);
+        free(solution);
+        free(quad);
+        return;
     }
 
-    for (i = 0; i < num_samples; i++) {
-        c = classes[i] - 1;
-        if (c < 0 || c >= num_class) {
-            continue;
-        }
-        counts[c]++;
-        for (j = 0; j < feature_dim; j++) {
-            means[c * feature_dim + j] += features[i * feature_dim + j];
-        }
-    }
+    memset(pooled_cov, 0, feature_dim * feature_dim * sizeof(float));
+    memset(means, 0, feature_dim * num_class * sizeof(float));
+    memset(class_data, 0, feature_dim * samples_per_class * sizeof(float));
 
+    /* For each class: compute per-feature mean, build the centered data
+       matrix, then add the class covariance into the pooled covariance. */
     for (c = 0; c < num_class; c++) {
-        if (counts[c] == 0) {
-            continue;
-        }
+        memset(class_data, 0, feature_dim * samples_per_class * sizeof(float));
         for (j = 0; j < feature_dim; j++) {
-            means[c * feature_dim + j] /= counts[c];
-        }
-    }
-
-    for (i = 0; i < num_samples; i++) {
-        c = classes[i] - 1;
-        if (c < 0 || c >= num_class) {
-            continue;
-        }
-        for (j = 0; j < feature_dim; j++) {
-            int k;
-            float dj = features[i * feature_dim + j] - means[c * feature_dim + j];
-            for (k = 0; k < feature_dim; k++) {
-                float dk = features[i * feature_dim + k] - means[c * feature_dim + k];
-                pooled_cov[j * feature_dim + k] += dj * dk;
+            float sum = 0.0f;
+            for (i = 0; i < samples_per_class; i++) {
+                sum += features[c * samples_per_class * feature_dim + i * feature_dim + j];
+            }
+            means[j * num_class + c] = sum / samples_per_class;
+            for (i = 0; i < samples_per_class; i++) {
+                class_data[i * feature_dim + j] =
+                    features[c * samples_per_class * feature_dim + i * feature_dim + j]
+                    - means[j * num_class + c];
             }
         }
+        cov(class_data, class_cov, samples_per_class, feature_dim);
+        addition(pooled_cov, class_cov, pooled_cov, feature_dim, feature_dim);
     }
 
-    {
-        int denom = num_samples - num_class;
-        if (denom < 1) {
-            denom = 1;
-        }
-        for (i = 0; i < feature_dim * feature_dim; i++) {
-            pooled_cov[i] /= denom;
+    /* Average the within-class covariance over the classes. */
+    for (j = 0; j < feature_dim; j++) {
+        for (i = 0; i < feature_dim; i++) {
+            pooled_cov[i * feature_dim + j] /= num_class;
         }
     }
 
     memcpy(lu, pooled_cov, feature_dim * feature_dim * sizeof(float));
-    for (i = 0; i < feature_dim; i++) {
-        lu[i * feature_dim + i] += regularization;
-    }
-    decomp_status = Choleski_LU_Decomposition(lu, feature_dim);
-    while (decomp_status < 0 && regularization < 1.0f) {
-        memcpy(lu, pooled_cov, feature_dim * feature_dim * sizeof(float));
-        regularization *= 10.0f;
-        for (i = 0; i < feature_dim; i++) {
-            lu[i * feature_dim + i] += regularization;
-        }
-        decomp_status = Choleski_LU_Decomposition(lu, feature_dim);
-    }
+    Choleski_LU_Decomposition(lu, feature_dim);
 
     for (c = 0; c < num_class; c++) {
-        float bias = 0.0f;
-        float prior = (num_samples > 0) ? ((float)counts[c] / (float)num_samples) : 0.0f;
-
         for (j = 0; j < feature_dim; j++) {
-            rhs[j] = means[c * feature_dim + j];
-            solution[j] = 0.0f;
+            rhs[j] = means[j * num_class + c];
         }
-
-        if (decomp_status == 0) {
-            Choleski_LU_Solve(lu, rhs, solution, feature_dim);
-        }
-
+        Choleski_LU_Solve(lu, rhs, solution, feature_dim);
         for (j = 0; j < feature_dim; j++) {
-            Wg[c + j * num_class] = solution[j];
-            bias += means[c * feature_dim + j] * solution[j];
+            Wg[j * num_class + c] = solution[j];
         }
-        Cg[c] = -0.5f * bias;
-        if (prior > 0.0f) {
-            Cg[c] += (float)log(prior);
-        }
+        /* quad = mean_c . (pooled_cov^-1 . mean_c) */
+        mulAB(rhs, solution, quad, 1, feature_dim, 1);
+        Cg[c] = -0.5f * quad[0];
     }
 
-cleanup:
-    free(means);
+    free(class_data);
+    free(class_cov);
     free(pooled_cov);
+    free(means);
     free(lu);
     free(rhs);
     free(solution);
-    free(counts);
+    free(quad);
 }
 
 DLL_EXPORT float LDA_train_accuracy(float *features, int *classes, float *Wg, float *Cg,
@@ -626,7 +615,7 @@ DLL_EXPORT float LDA_train_accuracy(float *features, int *classes, float *Wg, fl
 //           ...                                                              //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-int Lower_Triangular_Solve(float *L, float B[], float x[], int n)
+DLL_EXPORT int Lower_Triangular_Solve(float *L, float B[], float x[], int n)
 {
    int i, k;
 
@@ -677,7 +666,7 @@ int Lower_Triangular_Solve(float *L, float B[], float x[], int n)
 //           ...                                                              //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-int Upper_Triangular_Solve(float *U, float B[], float x[], int n)
+DLL_EXPORT int Upper_Triangular_Solve(float *U, float B[], float x[], int n)
 {
    int i, k;
 
@@ -739,7 +728,7 @@ int Upper_Triangular_Solve(float *U, float B[], float x[], int n)
 //           ...                                                              //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-int Choleski_LU_Decomposition(float *A, int n)
+DLL_EXPORT int Choleski_LU_Decomposition(float *A, int n)
 {
    int i, k, p;
    float *p_Lk0;                   // pointer to L[k][0]
@@ -826,7 +815,7 @@ int Choleski_LU_Decomposition(float *A, int n)
 //     }                                                                      //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-int Choleski_LU_Solve(float *LU, float B[], float x[], int n)
+DLL_EXPORT int Choleski_LU_Solve(float *LU, float B[], float x[], int n)
 {
 
 //         Solve the linear equation Ly = B for y, where L is a lower
@@ -842,7 +831,7 @@ int Choleski_LU_Solve(float *LU, float B[], float x[], int n)
 
 
 
-DLL_EXPORT int majority_vote(int * decision_buffer, int size)
+int majority_vote(int * decision_buffer, int size)
 {
 	int i,j;
 	int maxdata=0;

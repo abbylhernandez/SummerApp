@@ -1,0 +1,1968 @@
+
+[act1] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+[act2] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 1000
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 19
+  Total windows per label: 95
+  Total windows in training set: 190
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Train
+Expected windows: per_trial=19, per_label=95, total=190
+
+Total training trials processed: 10
+Total feature rows filled: 190 (expected 190)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 82.11%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01266	 xstd[0]: 0.007617
+xmean[1]: -0.003197	 xstd[1]: 0.006
+xmean[2]: 0.2146	 xstd[2]: 0.1637
+xmean[3]: 0.5345	 xstd[3]: 0.2429
+xmean[4]: 0.003974	 xstd[4]: 0.00187
+xmean[5]: -0.007532	 xstd[5]: 0.0004529
+xmean[6]: 0.02667	 xstd[6]: 0.04196
+xmean[7]: 0.09032	 xstd[7]: 0.1021
+xmean[8]: 0.005815	 xstd[8]: 0.002276
+xmean[9]: -0.007209	 xstd[9]: 0.0006225
+xmean[10]: 0.07158	 xstd[10]: 0.0646
+xmean[11]: 0.2949	 xstd[11]: 0.1637
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.3529	0.005061	-0.03891	-0.4513	-1.517	1.017	0.4366	0.04132	-0.03114	-0.02074	0.3815	0.2604
+Cg[0]: -0.3905
+
+Wg[1]:
+  0.3529	-0.005072	0.0389	0.4513	1.517	-1.017	-0.4366	-0.04132	0.03109	0.02078	-0.3815	-0.2605
+Cg[1]: -0.3905
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 190
+Correct decisions: 170
+Testing accuracy (window-level): 0.8947
+
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 1000
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 19
+  Total windows per label: 95
+  Total windows in training set: 190
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Train
+Expected windows: per_trial=19, per_label=95, total=190
+
+Total training trials processed: 10
+Total feature rows filled: 190 (expected 190)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 82.11%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01266	 xstd[0]: 0.007617
+xmean[1]: -0.003197	 xstd[1]: 0.006
+xmean[2]: 0.2146	 xstd[2]: 0.1637
+xmean[3]: 0.5345	 xstd[3]: 0.2429
+xmean[4]: 0.003974	 xstd[4]: 0.00187
+xmean[5]: -0.007532	 xstd[5]: 0.0004529
+xmean[6]: 0.02667	 xstd[6]: 0.04196
+xmean[7]: 0.09032	 xstd[7]: 0.1021
+xmean[8]: 0.005815	 xstd[8]: 0.002276
+xmean[9]: -0.007209	 xstd[9]: 0.0006225
+xmean[10]: 0.07158	 xstd[10]: 0.0646
+xmean[11]: 0.2949	 xstd[11]: 0.1637
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.3528	0.004972	-0.03895	-0.4513	-1.516	1.016	0.4366	0.04134	-0.03114	-0.02073	0.3815	0.2604
+Cg[0]: -1.084
+
+Wg[1]:
+  0.3528	-0.004991	0.03895	0.4513	1.516	-1.017	-0.4366	-0.04132	0.03109	0.02079	-0.3815	-0.2604
+Cg[1]: -1.084
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 190
+Correct decisions: 170
+Testing accuracy (window-level): 0.8947
+
+
+[act1] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+[act2] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 1000
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 19
+  Total windows per label: 95
+  Total windows in training set: 190
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Train
+Expected windows: per_trial=19, per_label=95, total=190
+
+Total training trials processed: 10
+Total feature rows filled: 190 (expected 190)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 82.11%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01266	 xstd[0]: 0.007617
+xmean[1]: -0.003197	 xstd[1]: 0.006
+xmean[2]: 0.2146	 xstd[2]: 0.1637
+xmean[3]: 0.5345	 xstd[3]: 0.2429
+xmean[4]: 0.003974	 xstd[4]: 0.00187
+xmean[5]: -0.007532	 xstd[5]: 0.0004529
+xmean[6]: 0.02667	 xstd[6]: 0.04196
+xmean[7]: 0.09032	 xstd[7]: 0.1021
+xmean[8]: 0.005815	 xstd[8]: 0.002276
+xmean[9]: -0.007209	 xstd[9]: 0.0006225
+xmean[10]: 0.07158	 xstd[10]: 0.0646
+xmean[11]: 0.2949	 xstd[11]: 0.1637
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.3529	0.005061	-0.03891	-0.4513	-1.517	1.017	0.4366	0.04132	-0.03114	-0.02074	0.3815	0.2604
+Cg[0]: -0.3905
+
+Wg[1]:
+  0.3529	-0.005072	0.0389	0.4513	1.517	-1.017	-0.4366	-0.04132	0.03109	0.02078	-0.3815	-0.2605
+Cg[1]: -0.3905
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 190
+Correct decisions: 170
+Testing accuracy (window-level): 0.8947
+
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 1000
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 19
+  Total windows per label: 95
+  Total windows in training set: 190
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Train
+Expected windows: per_trial=19, per_label=95, total=190
+
+Total training trials processed: 10
+Total feature rows filled: 190 (expected 190)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 82.11%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01266	 xstd[0]: 0.007617
+xmean[1]: -0.003197	 xstd[1]: 0.006
+xmean[2]: 0.2146	 xstd[2]: 0.1637
+xmean[3]: 0.5345	 xstd[3]: 0.2429
+xmean[4]: 0.003974	 xstd[4]: 0.00187
+xmean[5]: -0.007532	 xstd[5]: 0.0004529
+xmean[6]: 0.02667	 xstd[6]: 0.04196
+xmean[7]: 0.09032	 xstd[7]: 0.1021
+xmean[8]: 0.005815	 xstd[8]: 0.002276
+xmean[9]: -0.007209	 xstd[9]: 0.0006225
+xmean[10]: 0.07158	 xstd[10]: 0.0646
+xmean[11]: 0.2949	 xstd[11]: 0.1637
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.3528	0.004972	-0.03895	-0.4513	-1.516	1.016	0.4366	0.04134	-0.03114	-0.02073	0.3815	0.2604
+Cg[0]: -1.084
+
+Wg[1]:
+  0.3528	-0.004991	0.03895	0.4513	1.516	-1.017	-0.4366	-0.04132	0.03109	0.02079	-0.3815	-0.2604
+Cg[1]: -1.084
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 190
+Correct decisions: 170
+Testing accuracy (window-level): 0.8947
+
+
+[act1] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+[act2] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 1000
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 19
+  Total windows per label: 95
+  Total windows in training set: 190
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Train
+Expected windows: per_trial=19, per_label=95, total=190
+
+Total training trials processed: 10
+Total feature rows filled: 190 (expected 190)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 82.11%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01266	 xstd[0]: 0.007617
+xmean[1]: -0.003197	 xstd[1]: 0.006
+xmean[2]: 0.2146	 xstd[2]: 0.1637
+xmean[3]: 0.5345	 xstd[3]: 0.2429
+xmean[4]: 0.003974	 xstd[4]: 0.00187
+xmean[5]: -0.007532	 xstd[5]: 0.0004529
+xmean[6]: 0.02667	 xstd[6]: 0.04196
+xmean[7]: 0.09032	 xstd[7]: 0.1021
+xmean[8]: 0.005815	 xstd[8]: 0.002276
+xmean[9]: -0.007209	 xstd[9]: 0.0006225
+xmean[10]: 0.07158	 xstd[10]: 0.0646
+xmean[11]: 0.2949	 xstd[11]: 0.1637
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.3529	0.005061	-0.03891	-0.4513	-1.517	1.017	0.4366	0.04132	-0.03114	-0.02074	0.3815	0.2604
+Cg[0]: -0.3905
+
+Wg[1]:
+  0.3529	-0.005072	0.0389	0.4513	1.517	-1.017	-0.4366	-0.04132	0.03109	0.02078	-0.3815	-0.2605
+Cg[1]: -0.3905
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 190
+Correct decisions: 170
+Testing accuracy (window-level): 0.8947
+
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 1000
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 19
+  Total windows per label: 95
+  Total windows in training set: 190
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Train
+Expected windows: per_trial=19, per_label=95, total=190
+
+Total training trials processed: 10
+Total feature rows filled: 190 (expected 190)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 82.11%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01266	 xstd[0]: 0.007617
+xmean[1]: -0.003197	 xstd[1]: 0.006
+xmean[2]: 0.2146	 xstd[2]: 0.1637
+xmean[3]: 0.5345	 xstd[3]: 0.2429
+xmean[4]: 0.003974	 xstd[4]: 0.00187
+xmean[5]: -0.007532	 xstd[5]: 0.0004529
+xmean[6]: 0.02667	 xstd[6]: 0.04196
+xmean[7]: 0.09032	 xstd[7]: 0.1021
+xmean[8]: 0.005815	 xstd[8]: 0.002276
+xmean[9]: -0.007209	 xstd[9]: 0.0006225
+xmean[10]: 0.07158	 xstd[10]: 0.0646
+xmean[11]: 0.2949	 xstd[11]: 0.1637
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.3529	0.005045	-0.03891	-0.4513	-1.517	1.017	0.4366	0.04133	-0.03114	-0.02073	0.3815	0.2604
+Cg[0]: -0.3905
+
+Wg[1]:
+  0.3529	-0.005065	0.0389	0.4513	1.517	-1.017	-0.4366	-0.04132	0.03109	0.02079	-0.3815	-0.2605
+Cg[1]: -0.3905
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 190
+Correct decisions: 170
+Testing accuracy (window-level): 0.8947
+
+
+[act1] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+[act2] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 1000
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 19
+  Total windows per label: 95
+  Total windows in training set: 190
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Train
+Expected windows: per_trial=19, per_label=95, total=190
+
+Total training trials processed: 10
+Total feature rows filled: 190 (expected 190)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 82.11%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01266	 xstd[0]: 0.007617
+xmean[1]: -0.003197	 xstd[1]: 0.006
+xmean[2]: 0.2146	 xstd[2]: 0.1637
+xmean[3]: 0.5345	 xstd[3]: 0.2429
+xmean[4]: 0.003974	 xstd[4]: 0.00187
+xmean[5]: -0.007532	 xstd[5]: 0.0004529
+xmean[6]: 0.02667	 xstd[6]: 0.04196
+xmean[7]: 0.09032	 xstd[7]: 0.1021
+xmean[8]: 0.005815	 xstd[8]: 0.002276
+xmean[9]: -0.007209	 xstd[9]: 0.0006225
+xmean[10]: 0.07158	 xstd[10]: 0.0646
+xmean[11]: 0.2949	 xstd[11]: 0.1637
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.3529	0.005061	-0.03891	-0.4513	-1.517	1.017	0.4366	0.04132	-0.03114	-0.02074	0.3815	0.2604
+Cg[0]: -0.3905
+
+Wg[1]:
+  0.3529	-0.005072	0.0389	0.4513	1.517	-1.017	-0.4366	-0.04132	0.03109	0.02078	-0.3815	-0.2605
+Cg[1]: -0.3905
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 190
+Correct decisions: 170
+Testing accuracy (window-level): 0.8947
+
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 1000
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 19
+  Total windows per label: 95
+  Total windows in training set: 190
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Train
+Expected windows: per_trial=19, per_label=95, total=190
+
+Total training trials processed: 10
+Total feature rows filled: 190 (expected 190)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 82.11%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01266	 xstd[0]: 0.007617
+xmean[1]: -0.003197	 xstd[1]: 0.006
+xmean[2]: 0.2146	 xstd[2]: 0.1637
+xmean[3]: 0.5345	 xstd[3]: 0.2429
+xmean[4]: 0.003974	 xstd[4]: 0.00187
+xmean[5]: -0.007532	 xstd[5]: 0.0004529
+xmean[6]: 0.02667	 xstd[6]: 0.04196
+xmean[7]: 0.09032	 xstd[7]: 0.1021
+xmean[8]: 0.005815	 xstd[8]: 0.002276
+xmean[9]: -0.007209	 xstd[9]: 0.0006225
+xmean[10]: 0.07158	 xstd[10]: 0.0646
+xmean[11]: 0.2949	 xstd[11]: 0.1637
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.3529	0.005045	-0.03891	-0.4513	-1.517	1.017	0.4366	0.04133	-0.03114	-0.02073	0.3815	0.2604
+Cg[0]: -0.3905
+
+Wg[1]:
+  0.3529	-0.005065	0.0389	0.4513	1.517	-1.017	-0.4366	-0.04132	0.03109	0.02079	-0.3815	-0.2605
+Cg[1]: -0.3905
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 190
+Correct decisions: 170
+Testing accuracy (window-level): 0.8947
+
+
+[act1] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+[act2] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 200
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 3
+  Total windows per label: 15
+  Total windows in training set: 30
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp200\Train
+Expected windows: per_trial=3, per_label=15, total=30
+
+Total training trials processed: 10
+Total feature rows filled: 30 (expected 30)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 96.67%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01536	 xstd[0]: 0.01003
+xmean[1]: -0.0009027	 xstd[1]: 0.007883
+xmean[2]: 0.2427	 xstd[2]: 0.1704
+xmean[3]: 0.568	 xstd[3]: 0.2451
+xmean[4]: 0.004154	 xstd[4]: 0.001807
+xmean[5]: -0.007484	 xstd[5]: 0.0004031
+xmean[6]: 0.024	 xstd[6]: 0.03159
+xmean[7]: 0.1013	 xstd[7]: 0.09497
+xmean[8]: 0.00553	 xstd[8]: 0.001759
+xmean[9]: -0.00727	 xstd[9]: 0.0004797
+xmean[10]: 0.05956	 xstd[10]: 0.05544
+xmean[11]: 0.3067	 xstd[11]: 0.1756
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -9.642	7.496	-4.158	2.819	-7.169	-3.698	5.35	3.61	-2.851	0.8568	0.6152	-0.2364
+Cg[0]: -2.547
+
+Wg[1]:
+  9.642	-7.496	4.158	-2.819	7.169	3.698	-5.35	-3.61	2.851	-0.8568	-0.6152	0.2364
+Cg[1]: -2.547
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp200\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 30
+Correct decisions: 28
+Testing accuracy (window-level): 0.9333
+
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 200
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 3
+  Total windows per label: 15
+  Total windows in training set: 30
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp200\Train
+Expected windows: per_trial=3, per_label=15, total=30
+
+Total training trials processed: 10
+Total feature rows filled: 30 (expected 30)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 96.67%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01536	 xstd[0]: 0.01003
+xmean[1]: -0.0009027	 xstd[1]: 0.007883
+xmean[2]: 0.2427	 xstd[2]: 0.1704
+xmean[3]: 0.568	 xstd[3]: 0.2451
+xmean[4]: 0.004154	 xstd[4]: 0.001807
+xmean[5]: -0.007484	 xstd[5]: 0.0004031
+xmean[6]: 0.024	 xstd[6]: 0.03159
+xmean[7]: 0.1013	 xstd[7]: 0.09497
+xmean[8]: 0.00553	 xstd[8]: 0.001759
+xmean[9]: -0.00727	 xstd[9]: 0.0004797
+xmean[10]: 0.05956	 xstd[10]: 0.05544
+xmean[11]: 0.3067	 xstd[11]: 0.1756
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -9.642	7.496	-4.158	2.819	-7.169	-3.698	5.35	3.61	-2.851	0.8567	0.6152	-0.2364
+Cg[0]: -2.547
+
+Wg[1]:
+  9.642	-7.496	4.158	-2.819	7.169	3.698	-5.35	-3.61	2.851	-0.8568	-0.6152	0.2364
+Cg[1]: -2.547
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp200\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 30
+Correct decisions: 28
+Testing accuracy (window-level): 0.9333
+
+
+[act1] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+[act2] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 400
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 7
+  Total windows per label: 35
+  Total windows in training set: 70
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp400\Train
+Expected windows: per_trial=7, per_label=35, total=70
+
+Total training trials processed: 10
+Total feature rows filled: 70 (expected 70)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 91.43%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.015	 xstd[0]: 0.009739
+xmean[1]: -0.001344	 xstd[1]: 0.007759
+xmean[2]: 0.2499	 xstd[2]: 0.1822
+xmean[3]: 0.5846	 xstd[3]: 0.2558
+xmean[4]: 0.004124	 xstd[4]: 0.001872
+xmean[5]: -0.007489	 xstd[5]: 0.0004479
+xmean[6]: 0.0259	 xstd[6]: 0.03688
+xmean[7]: 0.1069	 xstd[7]: 0.11
+xmean[8]: 0.005675	 xstd[8]: 0.001728
+xmean[9]: -0.007274	 xstd[9]: 0.0004414
+xmean[10]: 0.06248	 xstd[10]: 0.0597
+xmean[11]: 0.2926	 xstd[11]: 0.1611
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.8079	0.4383	-0.4379	-1.357	-2.826	0.9488	1.142	0.483	0.06823	-0.1094	0.3129	0.6093
+Cg[0]: -1.148
+
+Wg[1]:
+  0.8079	-0.4382	0.4379	1.357	2.826	-0.9485	-1.142	-0.483	-0.0682	0.1094	-0.3129	-0.6093
+Cg[1]: -1.148
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp400\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 70
+Correct decisions: 70
+Testing accuracy (window-level): 1.0000
+
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 400
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 7
+  Total windows per label: 35
+  Total windows in training set: 70
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp400\Train
+Expected windows: per_trial=7, per_label=35, total=70
+
+Total training trials processed: 10
+Total feature rows filled: 70 (expected 70)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 91.43%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.015	 xstd[0]: 0.009739
+xmean[1]: -0.001344	 xstd[1]: 0.007759
+xmean[2]: 0.2499	 xstd[2]: 0.1822
+xmean[3]: 0.5846	 xstd[3]: 0.2558
+xmean[4]: 0.004124	 xstd[4]: 0.001872
+xmean[5]: -0.007489	 xstd[5]: 0.0004479
+xmean[6]: 0.0259	 xstd[6]: 0.03688
+xmean[7]: 0.1069	 xstd[7]: 0.11
+xmean[8]: 0.005675	 xstd[8]: 0.001728
+xmean[9]: -0.007274	 xstd[9]: 0.0004414
+xmean[10]: 0.06248	 xstd[10]: 0.0597
+xmean[11]: 0.2926	 xstd[11]: 0.1611
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.8079	0.4384	-0.4379	-1.358	-2.827	0.9489	1.142	0.4829	0.06827	-0.1094	0.3129	0.6093
+Cg[0]: -1.148
+
+Wg[1]:
+  0.8079	-0.4382	0.4379	1.357	2.826	-0.9486	-1.142	-0.483	-0.06822	0.1094	-0.3129	-0.6093
+Cg[1]: -1.148
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp400\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 70
+Correct decisions: 70
+Testing accuracy (window-level): 1.0000
+
+
+[act1] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+[act2] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 700
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 13
+  Total windows per label: 65
+  Total windows in training set: 130
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp700\Train
+Expected windows: per_trial=13, per_label=65, total=130
+
+Total training trials processed: 10
+Total feature rows filled: 130 (expected 130)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 89.23%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01374	 xstd[0]: 0.008507
+xmean[1]: -0.002331	 xstd[1]: 0.006732
+xmean[2]: 0.2318	 xstd[2]: 0.1749
+xmean[3]: 0.5594	 xstd[3]: 0.2495
+xmean[4]: 0.004199	 xstd[4]: 0.001949
+xmean[5]: -0.007476	 xstd[5]: 0.0004739
+xmean[6]: 0.02974	 xstd[6]: 0.04299
+xmean[7]: 0.09815	 xstd[7]: 0.1045
+xmean[8]: 0.005668	 xstd[8]: 0.0019
+xmean[9]: -0.007265	 xstd[9]: 0.0004811
+xmean[10]: 0.06728	 xstd[10]: 0.05886
+xmean[11]: 0.2862	 xstd[11]: 0.1573
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.4655	0.09189	0.1773	-1.463	-2.424	1.132	0.7301	0.2949	0.253	-0.3704	0.3966	0.5597
+Cg[0]: -0.8546
+
+Wg[1]:
+  0.4655	-0.09188	-0.1773	1.463	2.424	-1.132	-0.7301	-0.2949	-0.253	0.3704	-0.3965	-0.5597
+Cg[1]: -0.8546
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp700\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 130
+Correct decisions: 126
+Testing accuracy (window-level): 0.9692
+
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 700
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 13
+  Total windows per label: 65
+  Total windows in training set: 130
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp700\Train
+Expected windows: per_trial=13, per_label=65, total=130
+
+Total training trials processed: 10
+Total feature rows filled: 130 (expected 130)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 89.23%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01374	 xstd[0]: 0.008507
+xmean[1]: -0.002331	 xstd[1]: 0.006732
+xmean[2]: 0.2318	 xstd[2]: 0.1749
+xmean[3]: 0.5594	 xstd[3]: 0.2495
+xmean[4]: 0.004199	 xstd[4]: 0.001949
+xmean[5]: -0.007476	 xstd[5]: 0.0004739
+xmean[6]: 0.02974	 xstd[6]: 0.04299
+xmean[7]: 0.09815	 xstd[7]: 0.1045
+xmean[8]: 0.005668	 xstd[8]: 0.0019
+xmean[9]: -0.007265	 xstd[9]: 0.0004811
+xmean[10]: 0.06728	 xstd[10]: 0.05886
+xmean[11]: 0.2862	 xstd[11]: 0.1573
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.4655	0.09187	0.1773	-1.463	-2.424	1.132	0.7301	0.2949	0.253	-0.3704	0.3966	0.5597
+Cg[0]: -0.8546
+
+Wg[1]:
+  0.4654	-0.09186	-0.1773	1.463	2.424	-1.132	-0.7301	-0.2949	-0.253	0.3704	-0.3965	-0.5597
+Cg[1]: -0.8546
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp700\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 130
+Correct decisions: 126
+Testing accuracy (window-level): 0.9692
+
+
+[act1] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+[act2] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 1000
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 19
+  Total windows per label: 95
+  Total windows in training set: 190
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Train
+Expected windows: per_trial=19, per_label=95, total=190
+
+Total training trials processed: 10
+Total feature rows filled: 190 (expected 190)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 82.11%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01266	 xstd[0]: 0.007617
+xmean[1]: -0.003197	 xstd[1]: 0.006
+xmean[2]: 0.2146	 xstd[2]: 0.1637
+xmean[3]: 0.5345	 xstd[3]: 0.2429
+xmean[4]: 0.003974	 xstd[4]: 0.00187
+xmean[5]: -0.007532	 xstd[5]: 0.0004529
+xmean[6]: 0.02667	 xstd[6]: 0.04196
+xmean[7]: 0.09032	 xstd[7]: 0.1021
+xmean[8]: 0.005815	 xstd[8]: 0.002276
+xmean[9]: -0.007209	 xstd[9]: 0.0006225
+xmean[10]: 0.07158	 xstd[10]: 0.0646
+xmean[11]: 0.2949	 xstd[11]: 0.1637
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.3529	0.005061	-0.03891	-0.4513	-1.517	1.017	0.4366	0.04132	-0.03114	-0.02074	0.3815	0.2604
+Cg[0]: -0.3905
+
+Wg[1]:
+  0.3529	-0.005072	0.0389	0.4513	1.517	-1.017	-0.4366	-0.04132	0.03109	0.02078	-0.3815	-0.2605
+Cg[1]: -0.3905
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 190
+Correct decisions: 170
+Testing accuracy (window-level): 0.8947
+
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 1000
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 19
+  Total windows per label: 95
+  Total windows in training set: 190
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Train
+Expected windows: per_trial=19, per_label=95, total=190
+
+Total training trials processed: 10
+Total feature rows filled: 190 (expected 190)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 82.11%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01266	 xstd[0]: 0.007617
+xmean[1]: -0.003197	 xstd[1]: 0.006
+xmean[2]: 0.2146	 xstd[2]: 0.1637
+xmean[3]: 0.5345	 xstd[3]: 0.2429
+xmean[4]: 0.003974	 xstd[4]: 0.00187
+xmean[5]: -0.007532	 xstd[5]: 0.0004529
+xmean[6]: 0.02667	 xstd[6]: 0.04196
+xmean[7]: 0.09032	 xstd[7]: 0.1021
+xmean[8]: 0.005815	 xstd[8]: 0.002276
+xmean[9]: -0.007209	 xstd[9]: 0.0006225
+xmean[10]: 0.07158	 xstd[10]: 0.0646
+xmean[11]: 0.2949	 xstd[11]: 0.1637
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.3529	0.005045	-0.03891	-0.4513	-1.517	1.017	0.4366	0.04133	-0.03114	-0.02073	0.3815	0.2604
+Cg[0]: -0.3905
+
+Wg[1]:
+  0.3529	-0.005065	0.0389	0.4513	1.517	-1.017	-0.4366	-0.04132	0.03109	0.02079	-0.3815	-0.2605
+Cg[1]: -0.3905
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 190
+Correct decisions: 170
+Testing accuracy (window-level): 0.8947
+
+
+[act1] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+[act2] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 200
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 3
+  Total windows per label: 15
+  Total windows in training set: 30
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp200\Train
+Expected windows: per_trial=3, per_label=15, total=30
+
+Total training trials processed: 10
+Total feature rows filled: 30 (expected 30)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 96.67%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01536	 xstd[0]: 0.01003
+xmean[1]: -0.0009027	 xstd[1]: 0.007883
+xmean[2]: 0.2427	 xstd[2]: 0.1704
+xmean[3]: 0.568	 xstd[3]: 0.2451
+xmean[4]: 0.004154	 xstd[4]: 0.001807
+xmean[5]: -0.007484	 xstd[5]: 0.0004031
+xmean[6]: 0.024	 xstd[6]: 0.03159
+xmean[7]: 0.1013	 xstd[7]: 0.09497
+xmean[8]: 0.00553	 xstd[8]: 0.001759
+xmean[9]: -0.00727	 xstd[9]: 0.0004797
+xmean[10]: 0.05956	 xstd[10]: 0.05544
+xmean[11]: 0.3067	 xstd[11]: 0.1756
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -9.642	7.496	-4.158	2.819	-7.169	-3.698	5.35	3.61	-2.851	0.8568	0.6152	-0.2364
+Cg[0]: -2.547
+
+Wg[1]:
+  9.642	-7.496	4.158	-2.819	7.169	3.698	-5.35	-3.61	2.851	-0.8568	-0.6152	0.2364
+Cg[1]: -2.547
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp200\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 30
+Correct decisions: 28
+Testing accuracy (window-level): 0.9333
+
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 200
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 3
+  Total windows per label: 15
+  Total windows in training set: 30
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp200\Train
+Expected windows: per_trial=3, per_label=15, total=30
+
+Total training trials processed: 10
+Total feature rows filled: 30 (expected 30)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 96.67%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01536	 xstd[0]: 0.01003
+xmean[1]: -0.0009027	 xstd[1]: 0.007883
+xmean[2]: 0.2427	 xstd[2]: 0.1704
+xmean[3]: 0.568	 xstd[3]: 0.2451
+xmean[4]: 0.004154	 xstd[4]: 0.001807
+xmean[5]: -0.007484	 xstd[5]: 0.0004031
+xmean[6]: 0.024	 xstd[6]: 0.03159
+xmean[7]: 0.1013	 xstd[7]: 0.09497
+xmean[8]: 0.00553	 xstd[8]: 0.001759
+xmean[9]: -0.00727	 xstd[9]: 0.0004797
+xmean[10]: 0.05956	 xstd[10]: 0.05544
+xmean[11]: 0.3067	 xstd[11]: 0.1756
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -9.642	7.496	-4.158	2.819	-7.169	-3.698	5.35	3.61	-2.851	0.8567	0.6152	-0.2364
+Cg[0]: -2.547
+
+Wg[1]:
+  9.642	-7.496	4.158	-2.819	7.169	3.698	-5.35	-3.61	2.851	-0.8568	-0.6152	0.2364
+Cg[1]: -2.547
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp200\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 30
+Correct decisions: 28
+Testing accuracy (window-level): 0.9333
+
+
+[act1] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+[act2] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 400
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 7
+  Total windows per label: 35
+  Total windows in training set: 70
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp400\Train
+Expected windows: per_trial=7, per_label=35, total=70
+
+Total training trials processed: 10
+Total feature rows filled: 70 (expected 70)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 91.43%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.015	 xstd[0]: 0.009739
+xmean[1]: -0.001344	 xstd[1]: 0.007759
+xmean[2]: 0.2499	 xstd[2]: 0.1822
+xmean[3]: 0.5846	 xstd[3]: 0.2558
+xmean[4]: 0.004124	 xstd[4]: 0.001872
+xmean[5]: -0.007489	 xstd[5]: 0.0004479
+xmean[6]: 0.0259	 xstd[6]: 0.03688
+xmean[7]: 0.1069	 xstd[7]: 0.11
+xmean[8]: 0.005675	 xstd[8]: 0.001728
+xmean[9]: -0.007274	 xstd[9]: 0.0004414
+xmean[10]: 0.06248	 xstd[10]: 0.0597
+xmean[11]: 0.2926	 xstd[11]: 0.1611
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.8079	0.4383	-0.4379	-1.357	-2.826	0.9488	1.142	0.483	0.06823	-0.1094	0.3129	0.6093
+Cg[0]: -1.148
+
+Wg[1]:
+  0.8079	-0.4382	0.4379	1.357	2.826	-0.9485	-1.142	-0.483	-0.0682	0.1094	-0.3129	-0.6093
+Cg[1]: -1.148
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp400\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 70
+Correct decisions: 70
+Testing accuracy (window-level): 1.0000
+
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 400
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 7
+  Total windows per label: 35
+  Total windows in training set: 70
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp400\Train
+Expected windows: per_trial=7, per_label=35, total=70
+
+Total training trials processed: 10
+Total feature rows filled: 70 (expected 70)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 91.43%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.015	 xstd[0]: 0.009739
+xmean[1]: -0.001344	 xstd[1]: 0.007759
+xmean[2]: 0.2499	 xstd[2]: 0.1822
+xmean[3]: 0.5846	 xstd[3]: 0.2558
+xmean[4]: 0.004124	 xstd[4]: 0.001872
+xmean[5]: -0.007489	 xstd[5]: 0.0004479
+xmean[6]: 0.0259	 xstd[6]: 0.03688
+xmean[7]: 0.1069	 xstd[7]: 0.11
+xmean[8]: 0.005675	 xstd[8]: 0.001728
+xmean[9]: -0.007274	 xstd[9]: 0.0004414
+xmean[10]: 0.06248	 xstd[10]: 0.0597
+xmean[11]: 0.2926	 xstd[11]: 0.1611
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.8079	0.4384	-0.4379	-1.358	-2.827	0.9489	1.142	0.4829	0.06827	-0.1094	0.3129	0.6093
+Cg[0]: -1.148
+
+Wg[1]:
+  0.8079	-0.4382	0.4379	1.357	2.826	-0.9486	-1.142	-0.483	-0.06822	0.1094	-0.3129	-0.6093
+Cg[1]: -1.148
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp400\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 70
+Correct decisions: 70
+Testing accuracy (window-level): 1.0000
+
+
+[act1] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+[act2] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 700
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 13
+  Total windows per label: 65
+  Total windows in training set: 130
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp700\Train
+Expected windows: per_trial=13, per_label=65, total=130
+
+Total training trials processed: 10
+Total feature rows filled: 130 (expected 130)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 89.23%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01374	 xstd[0]: 0.008507
+xmean[1]: -0.002331	 xstd[1]: 0.006732
+xmean[2]: 0.2318	 xstd[2]: 0.1749
+xmean[3]: 0.5594	 xstd[3]: 0.2495
+xmean[4]: 0.004199	 xstd[4]: 0.001949
+xmean[5]: -0.007476	 xstd[5]: 0.0004739
+xmean[6]: 0.02974	 xstd[6]: 0.04299
+xmean[7]: 0.09815	 xstd[7]: 0.1045
+xmean[8]: 0.005668	 xstd[8]: 0.0019
+xmean[9]: -0.007265	 xstd[9]: 0.0004811
+xmean[10]: 0.06728	 xstd[10]: 0.05886
+xmean[11]: 0.2862	 xstd[11]: 0.1573
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.4655	0.09189	0.1773	-1.463	-2.424	1.132	0.7301	0.2949	0.253	-0.3704	0.3966	0.5597
+Cg[0]: -0.8546
+
+Wg[1]:
+  0.4655	-0.09188	-0.1773	1.463	2.424	-1.132	-0.7301	-0.2949	-0.253	0.3704	-0.3965	-0.5597
+Cg[1]: -0.8546
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp700\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 130
+Correct decisions: 126
+Testing accuracy (window-level): 0.9692
+
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 700
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 13
+  Total windows per label: 65
+  Total windows in training set: 130
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp700\Train
+Expected windows: per_trial=13, per_label=65, total=130
+
+Total training trials processed: 10
+Total feature rows filled: 130 (expected 130)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 89.23%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01374	 xstd[0]: 0.008507
+xmean[1]: -0.002331	 xstd[1]: 0.006732
+xmean[2]: 0.2318	 xstd[2]: 0.1749
+xmean[3]: 0.5594	 xstd[3]: 0.2495
+xmean[4]: 0.004199	 xstd[4]: 0.001949
+xmean[5]: -0.007476	 xstd[5]: 0.0004739
+xmean[6]: 0.02974	 xstd[6]: 0.04299
+xmean[7]: 0.09815	 xstd[7]: 0.1045
+xmean[8]: 0.005668	 xstd[8]: 0.0019
+xmean[9]: -0.007265	 xstd[9]: 0.0004811
+xmean[10]: 0.06728	 xstd[10]: 0.05886
+xmean[11]: 0.2862	 xstd[11]: 0.1573
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.4655	0.09187	0.1773	-1.463	-2.424	1.132	0.7301	0.2949	0.253	-0.3704	0.3966	0.5597
+Cg[0]: -0.8546
+
+Wg[1]:
+  0.4654	-0.09186	-0.1773	1.463	2.424	-1.132	-0.7301	-0.2949	-0.253	0.3704	-0.3965	-0.5597
+Cg[1]: -0.8546
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp700\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 130
+Correct decisions: 126
+Testing accuracy (window-level): 0.9692
+
+
+[act1] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+[act2] Split summary:
+  Total trials: 10
+  Train: 5
+  Test:  5
+  Method: first_half, Percentage: 50%
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 1000
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 19
+  Total windows per label: 95
+  Total windows in training set: 190
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Train
+Expected windows: per_trial=19, per_label=95, total=190
+
+Total training trials processed: 10
+Total feature rows filled: 190 (expected 190)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 82.11%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01266	 xstd[0]: 0.007617
+xmean[1]: -0.003197	 xstd[1]: 0.006
+xmean[2]: 0.2146	 xstd[2]: 0.1637
+xmean[3]: 0.5345	 xstd[3]: 0.2429
+xmean[4]: 0.003974	 xstd[4]: 0.00187
+xmean[5]: -0.007532	 xstd[5]: 0.0004529
+xmean[6]: 0.02667	 xstd[6]: 0.04196
+xmean[7]: 0.09032	 xstd[7]: 0.1021
+xmean[8]: 0.005815	 xstd[8]: 0.002276
+xmean[9]: -0.007209	 xstd[9]: 0.0006225
+xmean[10]: 0.07158	 xstd[10]: 0.0646
+xmean[11]: 0.2949	 xstd[11]: 0.1637
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.3529	0.005061	-0.03891	-0.4513	-1.517	1.017	0.4366	0.04132	-0.03114	-0.02074	0.3815	0.2604
+Cg[0]: -0.3905
+
+Wg[1]:
+  0.3529	-0.005072	0.0389	0.4513	1.517	-1.017	-0.4366	-0.04132	0.03109	0.02078	-0.3815	-0.2605
+Cg[1]: -0.3905
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 190
+Correct decisions: 170
+Testing accuracy (window-level): 0.8947
+
+
+=== Training Set ENTERED SETTINGS  ===
+  Number of labels (classes): 2
+  Trials per label: 5
+  Samples per trial: 1000
+  Channels: 3
+  TD features per channel: 4
+  Feature dimension (per window): 12
+  Window length (WL): 100
+  Window increment (WINC): 50
+  Windows per trial: 19
+  Total windows per label: 95
+  Total windows in training set: 190
+
+********************************************************
+*******      Training Session Starts      **************
+********************************************************
+Train folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Train
+Expected windows: per_trial=19, per_label=95, total=190
+
+Total training trials processed: 10
+Total feature rows filled: 190 (expected 190)
+
+Starting feature normalization and LDA training...
+Feature normalization complete.
+LDA training complete.
+Training accuracy = 82.11%
+
+=== Normalization Parameters (xmean, xstd) ===
+xmean[0]: 0.01266	 xstd[0]: 0.007617
+xmean[1]: -0.003197	 xstd[1]: 0.006
+xmean[2]: 0.2146	 xstd[2]: 0.1637
+xmean[3]: 0.5345	 xstd[3]: 0.2429
+xmean[4]: 0.003974	 xstd[4]: 0.00187
+xmean[5]: -0.007532	 xstd[5]: 0.0004529
+xmean[6]: 0.02667	 xstd[6]: 0.04196
+xmean[7]: 0.09032	 xstd[7]: 0.1021
+xmean[8]: 0.005815	 xstd[8]: 0.002276
+xmean[9]: -0.007209	 xstd[9]: 0.0006225
+xmean[10]: 0.07158	 xstd[10]: 0.0646
+xmean[11]: 0.2949	 xstd[11]: 0.1637
+
+=== LDA Weights (Wg) and Biases (Cg) ===
+Wg shape: 2 x 12 (stored column-major: Wg[i + j * num_class])
+Wg[0]:
+  -0.3529	0.005045	-0.03891	-0.4513	-1.517	1.017	0.4366	0.04133	-0.03114	-0.02073	0.3815	0.2604
+Cg[0]: -0.3905
+
+Wg[1]:
+  0.3529	-0.005065	0.0389	0.4513	1.517	-1.017	-0.4366	-0.04132	0.03109	0.02079	-0.3815	-0.2605
+Cg[1]: -0.3905
+
+=== End of LDA parameter report ===
+
+********************************************************
+*******        Testing Session Starts        ***********
+********************************************************
+Test folder: C:\Users\ranam\Downloads\SummerApp\FirstPhase\trial_logs\ObjectData-2026-07-02 10-30-22 AM\ResultClipSizeUp1000\Test
+
+--- TEST Label 1 (act1) ---
+Trial: act1/trial_5.txt
+Trial: act1/trial_6.txt
+Trial: act1/trial_7.txt
+Trial: act1/trial_8.txt
+Trial: act1/trial_9.txt
+--- TEST Label 2 (act2) ---
+Trial: act2/trial_5.txt
+Trial: act2/trial_6.txt
+Trial: act2/trial_7.txt
+Trial: act2/trial_8.txt
+Trial: act2/trial_9.txt
+=== Testing Summary ===
+Total test windows: 190
+Correct decisions: 170
+Testing accuracy (window-level): 0.8947
+
