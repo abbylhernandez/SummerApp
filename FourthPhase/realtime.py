@@ -20,13 +20,17 @@ try:
     import sounddevice as sd
 except Exception as _e:  # pragma: no cover - environment dependent
     sd = None
-    logging.warning("sounddevice unavailable; microphone disabled: %s", _e)
+    _sounddevice_import_error = _e
+else:
+    _sounddevice_import_error = None
 
 try:
     import imageio_ffmpeg
 except Exception as _e:  # pragma: no cover - environment dependent
     imageio_ffmpeg = None
-    logging.warning("imageio_ffmpeg unavailable; audio will not be muxed into video: %s", _e)
+    _imageio_ffmpeg_import_error = _e
+else:
+    _imageio_ffmpeg_import_error = None
 
 
 # =========================
@@ -38,6 +42,7 @@ AUDIO_RATE = 44100                 # sample rate (Hz)
 AUDIO_BLOCK = 1024                 # samples per audio callback block
 AUDIO_ENV_CHUNK = 441              # samples per envelope point (~10 ms at 44.1 kHz)
 AUDIO_MIN_SPAN = 0.02              # smallest y-height so silence doesn't over-zoom
+EMG_MIN_SPAN = 0.10                # show small EMG changes around the ADC baseline
 
 # =========================
 # Theme palettes (mirrors FirstPhase/theme.py)
@@ -228,16 +233,26 @@ class CameraCapture:
         self.recording = False
         self.video_writer = None
         self.record_path = None
+        self.capture_fps = float(fps)
+        self._writer_lock = threading.Lock()
+        self._fps_window_start = time.perf_counter()
+        self._fps_window_frames = 0
 
     def start(self):
         # CAP_DSHOW is good for Windows
         self.cap = cv2.VideoCapture(self.cam_index, cv2.CAP_DSHOW)
         if not self.cap.isOpened():
             logging.error("❌ Failed to open camera.")
+            self.cap.release()
+            self.cap = None
             return False
 
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+        self.cap.set(cv2.CAP_PROP_FPS, self.fps)
+        reported_fps = self.cap.get(cv2.CAP_PROP_FPS)
+        if reported_fps and 1.0 < reported_fps <= 240.0:
+            self.capture_fps = float(reported_fps)
 
         self.running = True
         self.thread = threading.Thread(target=self._capture_loop, daemon=True)
@@ -249,9 +264,22 @@ class CameraCapture:
         while self.running:
             ret, frame = self.cap.read()
             if not ret:
+                if self.running:
+                    time.sleep(0.01)
                 continue
 
             resized = cv2.resize(frame, (self.width, self.height))
+
+            # Track delivered frames rather than trusting the camera driver's
+            # nominal FPS. The latest complete window is used for new videos.
+            self._fps_window_frames += 1
+            fps_elapsed = time.perf_counter() - self._fps_window_start
+            if fps_elapsed >= 2.0:
+                measured_fps = self._fps_window_frames / fps_elapsed
+                if 1.0 < measured_fps <= 240.0:
+                    self.capture_fps = measured_fps
+                self._fps_window_start = time.perf_counter()
+                self._fps_window_frames = 0
 
             # If recording, overlay timestamp
             if self.recording:
@@ -273,8 +301,9 @@ class CameraCapture:
                 self.frame_queue.put(rgb)
 
             # For saving to disk (BGR)
-            if self.recording and self.video_writer is not None:
-                self.video_writer.write(resized)
+            with self._writer_lock:
+                if self.recording and self.video_writer is not None:
+                    self.video_writer.write(resized)
 
     def get_latest_frame(self):
         if not self.frame_queue.empty():
@@ -288,6 +317,9 @@ class CameraCapture:
         - If base_folder given, file is saved inside that folder.
         - If filename is None, default to 'video.avi'.
         """
+        if not self.running or self.cap is None:
+            logging.error("❌ Cannot record video because the camera is not running.")
+            return False
         if filename is None:
             filename = "video.avi"
         if base_folder is not None:
@@ -295,34 +327,55 @@ class CameraCapture:
             filename = os.path.join(base_folder, filename)
 
         fourcc = cv2.VideoWriter_fourcc(*'XVID')  # good on Windows
-        self.record_path = filename
-        self.video_writer = cv2.VideoWriter(
-            filename, fourcc, self.fps, (self.width, self.height)
+        with self._writer_lock:
+            self.record_path = filename
+            self.video_writer = cv2.VideoWriter(
+                filename, fourcc, self.capture_fps, (self.width, self.height)
+            )
+
+            if not self.video_writer.isOpened():
+                logging.error(f"❌ Failed to open video file for writing: {filename}")
+                self.video_writer.release()
+                self.video_writer = None
+                self.recording = False
+                return False
+
+            self.recording = True
+        logging.info(
+            "🎥 Video recording started at %.2f FPS: %s",
+            self.capture_fps,
+            filename,
         )
-
-        if not self.video_writer.isOpened():
-            logging.error(f"❌ Failed to open video file for writing: {filename}")
-            self.video_writer = None
-            self.recording = False
-            return False
-
-        self.recording = True
-        logging.info(f"🎥 Video recording started: {filename}")
         return True
 
     def stop_recording(self):
-        if self.recording:
+        saved_path = None
+        with self._writer_lock:
+            if not self.recording and self.video_writer is None:
+                return None
             self.recording = False
             if self.video_writer is not None:
                 self.video_writer.release()
                 self.video_writer = None
-            logging.info(f"🎞️ Video recording stopped and saved to: {self.record_path}")
+            saved_path = self.record_path
+        logging.info(f"🎞️ Video recording stopped and saved to: {saved_path}")
+        return saved_path
 
     def stop(self):
         self.running = False
+        if self.thread is not None and self.thread is not threading.current_thread():
+            self.thread.join(timeout=2.0)
+        if self.thread is not None and self.thread.is_alive():
+            logging.warning("Camera thread did not stop before capture release.")
         if self.cap is not None:
             self.cap.release()
             self.cap = None
+        if self.thread is not None and self.thread.is_alive():
+            self.thread.join(timeout=1.0)
+        if self.thread is not None and self.thread.is_alive():
+            logging.error("Camera thread is still alive after capture release.")
+        self.thread = None
+        self.stop_recording()
         logging.info("📷 Camera stopped.")
 
 
@@ -333,13 +386,18 @@ class SerialEMGHandler:
     """
     Talks to STM32 over USART2.
 
-    MCU sends, for uart_flag3 == 1, lines like:
+    MCU sends either of these line formats:
 
         "%d,%d,%d,%c,%d\r\n"
+        "%d,%d,%d,%c\r\n"
 
     That is:
 
         ch1_raw, ch2_raw, ch3_raw, pred_char, button
+        ch1_raw, ch2_raw, ch3_raw, pred_char
+
+    In the current firmware, pred_char is the byte received by the MCU on
+    UART5_RX (PD2). Four-field packets do not contain a button value.
 
     Example:
 
@@ -361,6 +419,10 @@ class SerialEMGHandler:
         self.sample_callback = None
         self.emg_callback = None
         self.pred_callback = None
+        self._raw_log_counter = 0
+        self._received_line_count = 0
+        self._parsed_sample_count = 0
+        self._rejected_line_count = 0
 
     # ---------- Public API ----------
 
@@ -374,39 +436,58 @@ class SerialEMGHandler:
         self.pred_callback = func
 
     def open(self):
+        if self.ser is not None and self.ser.is_open:
+            return True
         try:
             self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
             self.ser.flushInput()
             logging.info(f"✅ Opened {self.port} @ {self.baudrate}")
-        except serial.SerialException as e:
+            return True
+        except (serial.SerialException, ValueError, OSError) as e:
             logging.error(f"❌ Failed to open serial port {self.port}: {e}")
             self.ser = None
+            return False
 
     def start_stream(self, mode_char=b'c'):
         """
         Send 'c' to MCU to enable uart_flag3 (EMG + predictions).
         """
+        if self.running and self.thread is not None and self.thread.is_alive():
+            return True
+        if self.thread is not None and self.thread.is_alive():
+            logging.error("Previous serial reader is still stopping.")
+            return False
         if not self.ser or not self.ser.is_open:
-            self.open()
-            if not self.ser:
-                return
+            if not self.open():
+                return False
 
         try:
             self.ser.write(mode_char)  # single char 'c'
             logging.info(f"▶️ Sent {mode_char!r} to MCU")
         except Exception as e:
             logging.error(f"❌ Failed to send start command: {e}")
-            return
+            return False
 
         self.running = True
-        self.thread = threading.Thread(target=self.read_loop, daemon=True)
-        self.thread.start()
+        self._received_line_count = 0
+        self._parsed_sample_count = 0
+        self._rejected_line_count = 0
+        try:
+            self.thread = threading.Thread(target=self.read_loop, daemon=True)
+            self.thread.start()
+        except Exception as e:
+            self.running = False
+            self.thread = None
+            logging.error("❌ Failed to start serial reader: %s", e)
+            return False
+        return True
 
     def stop_stream(self, stop_char=b'v'):
         """
         Send 'v' → firmware goes to 'else' and stops ADC.
         """
         logging.info("🛑 Stopping serial handler...")
+        self.running = False
         if self.ser and self.ser.is_open:
             try:
                 self.ser.write(stop_char)
@@ -414,9 +495,22 @@ class SerialEMGHandler:
             except Exception as e:
                 logging.warning(f"⚠️ Failed to send stop command: {e}")
 
-        self.running = False
-        if self.thread:
-            self.thread.join(timeout=1)
+            try:
+                self.ser.cancel_read()
+            except (AttributeError, OSError, serial.SerialException):
+                pass
+        if self.thread and self.thread is not threading.current_thread():
+            self.thread.join(timeout=2.0)
+            if self.thread.is_alive():
+                logging.warning("Serial reader did not stop within timeout.")
+            else:
+                self.thread = None
+        logging.info(
+            "Serial summary: %d lines received, %d EMG samples parsed, %d rejected.",
+            self._received_line_count,
+            self._parsed_sample_count,
+            self._rejected_line_count,
+        )
 
     def close(self):
         if self.ser and self.ser.is_open:
@@ -425,6 +519,7 @@ class SerialEMGHandler:
                 logging.info("🔌 Closed serial port")
             except Exception as e:
                 logging.warning(f"⚠️ Error closing serial: {e}")
+        self.ser = None
 
     # ---------- Reader (HARDENED FOR NEW FORMAT) ----------
 
@@ -449,20 +544,26 @@ class SerialEMGHandler:
                 if not line:
                     continue
 
-                logging.debug(f"RAW LINE: {repr(line)}")
+                self._received_line_count += 1
+                self._raw_log_counter += 1
+                if self._raw_log_counter % 1000 == 1:
+                    logging.debug("RAW LINE (1/1000): %r", line)
                 now_str = datetime.now().strftime('%H:%M:%S.%f')[:-3]
 
-                # Expect exactly: v1,v2,v3,pred_char,button  -> 4 commas
-                if line.count(',') != 4:
-                    logging.debug(f"[IGNORED] Not 5 fields: {repr(line)}")
+                # Ignore the firmware's command echo without counting it as bad data.
+                if line.startswith("UART2 received:"):
                     continue
 
                 try:
                     parts = [p.strip() for p in line.split(',')]
-                    if len(parts) != 5:
-                        raise ValueError(f"expected 5 fields, got {len(parts)}")
-
-                    a, b, c, pred_token, button_token = parts
+                    if len(parts) == 5:
+                        a, b, c, pred_token, button_token = parts
+                    elif len(parts) == 4:
+                        # Current MCU packet: EMG + prediction from UART5_RX (PD2).
+                        a, b, c, pred_token = parts
+                        button_token = None
+                    else:
+                        raise ValueError(f"expected 4 or 5 fields, got {len(parts)}")
 
                     # ---------- Parse and validate ADC fields ----------
                     vals = []
@@ -505,10 +606,12 @@ class SerialEMGHandler:
                         )
 
                     # ---------- Parse button state ----------
-                    if not button_token.isdigit():
-                        raise ValueError(f"button token is not digits: {button_token!r}")
-
-                    button_state = int(button_token)
+                    if button_token is None:
+                        button_state = -1  # no button field in the 4-column packet
+                    else:
+                        if not button_token.isdigit():
+                            raise ValueError(f"button token is not digits: {button_token!r}")
+                        button_state = int(button_token)
 
                     # ---------- Convert to voltages ----------
                     ch1_v = (ch1_raw / ADC_RES) * VREF - MIDPOINT
@@ -552,11 +655,15 @@ class SerialEMGHandler:
                         if self.pred_callback:
                             self.pred_callback(now_str, pred_val, button_state)
 
+                    self._parsed_sample_count += 1
+
                 except Exception as e:
                     # Anything weird (merged lines, garbage, spike) is skipped
-                    logging.warning(
-                        f"⚠️ Skipping suspicious line '{line}': {e}"
-                    )
+                    self._rejected_line_count += 1
+                    if self._rejected_line_count <= 5:
+                        logging.warning(
+                            f"⚠️ Skipping suspicious line '{line}': {e}"
+                        )
 
             except Exception as e:
                 logging.warning(f"⚠️ Serial read error: {e}")
@@ -574,8 +681,9 @@ class RealTimeTestApp(QtWidgets.QWidget):
     emg_sig = QtCore.pyqtSignal(float, float, float)
     plot_sig = QtCore.pyqtSignal(float, float, float)
     pred_sig = QtCore.pyqtSignal(object, int)
+    mux_done_sig = QtCore.pyqtSignal(int, bool, str)
 
-    def __init__(self, port='COM8', baudrate=500000, parent=None):
+    def __init__(self, port='/dev/cu.usbmodem1203', baudrate=500000, parent=None):
         super().__init__(parent)
 
         self.setWindowTitle("Real-Time EMG + Prediction + Video")
@@ -613,6 +721,10 @@ class RealTimeTestApp(QtWidgets.QWidget):
         self.sample_counter = 0
         self.last_pred_ui = None
         self.last_button_ui = None
+        self._trial_lock = threading.Lock()
+        self._mux_lock = threading.Lock()
+        self._mux_threads = []
+        self._closing = False
 
         # Plot buffers (kept intentionally small for low-resolution plotting)
         self.plot_x = deque(maxlen=self.PLOT_MAX_POINTS)
@@ -712,6 +824,7 @@ class RealTimeTestApp(QtWidgets.QWidget):
         self.emg_sig.connect(self.update_emg_label)
         self.plot_sig.connect(self.on_plot_sample)
         self.pred_sig.connect(self.update_pred_labels)
+        self.mux_done_sig.connect(self._on_mux_done)
 
         self.plot_timer = QtCore.QTimer(self)
         self.plot_timer.timeout.connect(self.refresh_plot)
@@ -754,13 +867,24 @@ class RealTimeTestApp(QtWidgets.QWidget):
 
     # ---------- Start / Stop ----------
 
+    def _close_trial_files(self):
+        for attr in ("emg_file", "pred_file", "button_file"):
+            handle = getattr(self, attr)
+            if handle is None:
+                continue
+            try:
+                handle.close()
+            except Exception as e:
+                logging.warning("Failed to close %s: %s", attr, e)
+            finally:
+                setattr(self, attr, None)
+
     def handle_start(self):
         if self.collecting:
             return
 
         # Each press of Start = new trial number
-        self.trial_counter += 1
-        trial_idx = self.trial_counter
+        trial_idx = self.trial_counter + 1
 
         # Folder where EMG + videos live (the session folder)
         self.current_set_dir = self.session_dir
@@ -773,22 +897,36 @@ class RealTimeTestApp(QtWidgets.QWidget):
         # Button file in session folder: button_1.txt, button_2.txt, ...
         button_path = self.current_set_dir / f"button_{trial_idx}.txt"
 
-        # Open EMG / prediction / button files
-        self.emg_file = open(emg_path, "w", buffering=1)
-        self.pred_file = open(pred_path, "w", buffering=1)
-        self.button_file = open(button_path, "w", buffering=1)
+        # Open all files before enabling the MCU. A partial open is rolled back.
+        opened = []
+        try:
+            self.emg_file = open(emg_path, "w", buffering=1, encoding="utf-8")
+            opened.append(self.emg_file)
+            self.pred_file = open(pred_path, "w", buffering=1, encoding="utf-8")
+            opened.append(self.pred_file)
+            self.button_file = open(button_path, "w", buffering=1, encoding="utf-8")
+            opened.append(self.button_file)
+            self.emg_file.write("timestamp\tch1\tch2\tch3\n")
+            self.pred_file.write("timestamp\tclass\tbutton\n")
+            self.button_file.write("t_ns,button\n")
+        except Exception as e:
+            for handle in opened:
+                try:
+                    handle.close()
+                except Exception:
+                    pass
+            self.emg_file = self.pred_file = self.button_file = None
+            logging.error("Could not create trial files: %s", e)
+            QtWidgets.QMessageBox.critical(self, "Recording Error", str(e))
+            return
 
-        # Same style as Application5: button file uses t_ns from trial start.
-        self.t0_ns = time.perf_counter_ns()
-
-        self.emg_file.write("timestamp\tch1\tch2\tch3\n")
-        self.pred_file.write("timestamp\tclass\tbutton\n")
-        self.button_file.write("t_ns,button\n")
-
-        self.collecting = True
-        self.sample_counter = 0
-        self.last_pred_ui = None
-        self.last_button_ui = None
+        with self._trial_lock:
+            self.trial_counter = trial_idx
+            self.t0_ns = time.perf_counter_ns()
+            self.collecting = True
+            self.sample_counter = 0
+            self.last_pred_ui = None
+            self.last_button_ui = None
         self.plot_point_idx = 0
         self.plot_x.clear()
         self.plot_ch1.clear()
@@ -796,49 +934,63 @@ class RealTimeTestApp(QtWidgets.QWidget):
         self.plot_ch3.clear()
 
         # Start serial stream
-        self.serial.start_stream(mode_char=b'c')
+        if not self.serial.start_stream(mode_char=b'c'):
+            with self._trial_lock:
+                self.collecting = False
+                self.t0_ns = None
+                self._close_trial_files()
+                self.trial_counter -= 1
+            self.status_lbl.setText("Status: Serial connection failed.")
+            logging.error("Trial %d cancelled because serial startup failed.", trial_idx)
+            QtWidgets.QMessageBox.warning(
+                self, "Serial Error", f"Could not start streaming from {self.serial.port}."
+            )
+            return
 
         # Start video recording in same session folder
-        if self.camera.cap is not None:
-            self.camera.start_recording(
+        video_started = False
+        if self.camera.running:
+            video_started = self.camera.start_recording(
                 filename=f"video_{trial_idx}.avi",
                 base_folder=str(self.current_set_dir),
             )
 
         # Start audio recording (WAV, muxed into video at trial end)
+        audio_started = False
         if self.audio_available:
-            self.audio.start_recording(self.current_set_dir / f"_audio_{trial_idx}.wav")
+            audio_started = self.audio.start_recording(
+                self.current_set_dir / f"_audio_{trial_idx}.wav"
+            )
 
         self.pred_label.setText("Last prediction: -")
         self.button_label.setText("Last button: -")
         self.emg_label.setText("Last EMG: -")
         self.audio_curve.setData([], [])
 
-        self.status_lbl.setText(f"Status: Logging trial {trial_idx}…")
+        unavailable = []
+        if not video_started:
+            unavailable.append("video unavailable")
+        if not self.audio_available or not audio_started:
+            unavailable.append("audio unavailable")
+        suffix = f" ({', '.join(unavailable)})" if unavailable else ""
+        self.status_lbl.setText(f"Status: Logging trial {trial_idx}…{suffix}")
         logging.info(f"✅ Started new trial {trial_idx} in {self.current_set_dir}")
 
     def handle_stop(self):
         if not self.collecting:
             return
 
-        trial_idx = self.trial_counter
+        with self._trial_lock:
+            trial_idx = self.trial_counter
+            self.collecting = False
 
         # Stop serial stream
         self.serial.stop_stream(stop_char=b'v')
 
         # Close EMG / prediction / button files
-        if self.emg_file:
-            self.emg_file.close()
-            self.emg_file = None
-        if self.pred_file:
-            self.pred_file.close()
-            self.pred_file = None
-        if self.button_file:
-            self.button_file.close()
-            self.button_file = None
-
-        self.t0_ns = None
-        self.collecting = False
+        with self._trial_lock:
+            self._close_trial_files()
+            self.t0_ns = None
         logging.info("🛑 Stopped EMG/prediction/button recording.")
 
         # Stop video recording only (keep camera running)
@@ -849,9 +1001,10 @@ class RealTimeTestApp(QtWidgets.QWidget):
         if self.audio_available:
             wav_path = self.audio.stop_recording()
             self._write_audio_envelope(trial_idx)
-            self._mux_audio_into_video(trial_idx, wav_path)
-
-        self.status_lbl.setText(f"Status: Trial {trial_idx} saved.")
+            self.status_lbl.setText(f"Status: Trial {trial_idx} saved; finalizing audio…")
+            self._start_audio_mux(trial_idx, wav_path)
+        else:
+            self.status_lbl.setText(f"Status: Trial {trial_idx} saved (no audio).")
 
     # ---------- Audio persistence ----------
 
@@ -872,16 +1025,78 @@ class RealTimeTestApp(QtWidgets.QWidget):
             return None
         return path
 
-    def _mux_audio_into_video(self, trial_idx, wav_path):
-        """Merge the recorded WAV into video_N.avi, then delete the WAV."""
-        video = self.session_dir / f"video_{trial_idx}.avi"
-        if not wav_path or not Path(wav_path).exists() or not video.exists():
-            if wav_path and Path(wav_path).exists():
-                os.remove(wav_path)
+    def _start_audio_mux(self, trial_idx, wav_path):
+        """Run FFmpeg outside the GUI thread and report completion via Qt."""
+        if not wav_path:
+            self.mux_done_sig.emit(trial_idx, False, "no audio was recorded")
             return
+
+        def worker():
+            try:
+                success, message = self._mux_audio_into_video(trial_idx, wav_path)
+                self.mux_done_sig.emit(trial_idx, success, message)
+            except Exception as e:
+                logging.exception("Unexpected audio mux failure for trial %d.", trial_idx)
+                self.mux_done_sig.emit(
+                    trial_idx,
+                    False,
+                    f"standalone audio kept at {wav_path} ({e})",
+                )
+            finally:
+                current = threading.current_thread()
+                with self._mux_lock:
+                    self._mux_threads = [t for t in self._mux_threads if t is not current]
+
+        thread = threading.Thread(
+            target=worker,
+            name=f"audio-mux-{trial_idx}",
+            daemon=False,
+        )
+        with self._mux_lock:
+            self._mux_threads.append(thread)
+        try:
+            thread.start()
+        except Exception as e:
+            with self._mux_lock:
+                self._mux_threads.remove(thread)
+            logging.exception("Could not start the audio mux worker.")
+            self.mux_done_sig.emit(
+                trial_idx,
+                False,
+                f"standalone audio kept at {wav_path} ({e})",
+            )
+
+    @QtCore.pyqtSlot(int, bool, str)
+    def _on_mux_done(self, trial_idx, success, message):
+        if self._closing or self.collecting or trial_idx != self.trial_counter:
+            return
+        if success:
+            self.status_lbl.setText(f"Status: Trial {trial_idx} saved.")
+        else:
+            self.status_lbl.setText(f"Status: Trial {trial_idx} saved; {message}.")
+
+    def _wait_for_mux_threads(self):
+        """Wait for in-flight mux jobs so the process cannot abandon a recording."""
+        while True:
+            with self._mux_lock:
+                threads = list(self._mux_threads)
+            if not threads:
+                return
+            for thread in threads:
+                if thread is not threading.current_thread():
+                    thread.join()
+
+    def _mux_audio_into_video(self, trial_idx, wav_path):
+        """Merge audio into video; delete the WAV only after confirmed success."""
+        video = self.session_dir / f"video_{trial_idx}.avi"
+        if not wav_path or not Path(wav_path).exists():
+            return False, "audio file is missing"
+        if not video.exists():
+            logging.warning("Video missing; keeping standalone audio: %s", wav_path)
+            return False, f"standalone audio kept at {wav_path}"
         if imageio_ffmpeg is None:
             logging.warning("imageio_ffmpeg missing; keeping video silent (WAV kept: %s)", wav_path)
-            return
+            return False, f"standalone audio kept at {wav_path}"
         out = self.session_dir / f"_muxed_{trial_idx}.avi"
         cmd = [
             imageio_ffmpeg.get_ffmpeg_exe(), "-y",
@@ -890,17 +1105,36 @@ class RealTimeTestApp(QtWidgets.QWidget):
         ]
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         try:
-            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL, creationflags=flags)
+            subprocess.run(
+                cmd,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=flags,
+                timeout=300,
+            )
             os.replace(out, video)
-            logging.info("Merged audio into %s", video)
-        except Exception as e:
-            logging.warning("Audio mux failed (%s); video kept silent.", e)
-            if out.exists():
-                os.remove(out)
-        finally:
-            if Path(wav_path).exists():
+            try:
                 os.remove(wav_path)
+            except OSError as cleanup_error:
+                logging.warning(
+                    "Audio was merged, but the source WAV could not be removed: %s",
+                    cleanup_error,
+                )
+            logging.info("Merged audio into %s", video)
+            return True, "audio merged"
+        except Exception as e:
+            logging.warning(
+                "Audio mux failed (%s); video kept silent and WAV retained at %s.",
+                e,
+                wav_path,
+            )
+            if out.exists():
+                try:
+                    os.remove(out)
+                except OSError as cleanup_error:
+                    logging.warning("Could not remove temporary mux file %s: %s", out, cleanup_error)
+            return False, f"standalone audio kept at {wav_path}"
 
     # ---------- Camera display ----------
 
@@ -921,43 +1155,57 @@ class RealTimeTestApp(QtWidgets.QWidget):
         Single per-sample callback from serial parser.
         One line in all files shares exactly the same timestamp.
         """
-        if not self.collecting:
-            return
+        with self._trial_lock:
+            if not self.collecting:
+                return
 
-        if self.emg_file is not None:
-            try:
-                self.emg_file.write(f"{timestamp_str}\t{ch1:.6f}\t{ch2:.6f}\t{ch3:.6f}\n")
-            except Exception as e:
-                logging.warning(f"⚠️ Failed to write EMG line: {e}")
+            if self.emg_file is not None:
+                try:
+                    self.emg_file.write(
+                        f"{timestamp_str}\t{ch1:.6f}\t{ch2:.6f}\t{ch3:.6f}\n"
+                    )
+                except Exception as e:
+                    logging.warning(f"⚠️ Failed to write EMG line: {e}")
 
-        if self.pred_file is not None:
-            try:
-                self.pred_file.write(f"{timestamp_str}\t{pred_class}\t{button_state}\n")
-            except Exception as e:
-                logging.warning(f"⚠️ Failed to write prediction line: {e}")
+            if self.pred_file is not None:
+                try:
+                    self.pred_file.write(f"{timestamp_str}\t{pred_class}\t{button_state}\n")
+                except Exception as e:
+                    logging.warning(f"⚠️ Failed to write prediction line: {e}")
 
-        if self.button_file is not None:
-            try:
-                if self.t0_ns is not None:
-                    t_ns = time.perf_counter_ns() - self.t0_ns
-                else:
-                    t_ns = time.perf_counter_ns()
-                self.button_file.write(f"{t_ns},{button_state}\n")
-            except Exception as e:
-                logging.warning(f"⚠️ Failed to write button line: {e}")
+            if self.button_file is not None:
+                try:
+                    if self.t0_ns is not None:
+                        t_ns = time.perf_counter_ns() - self.t0_ns
+                    else:
+                        t_ns = time.perf_counter_ns()
+                    self.button_file.write(f"{t_ns},{button_state}\n")
+                except Exception as e:
+                    logging.warning(f"⚠️ Failed to write button line: {e}")
 
-        # Throttle GUI updates so serial + camera paths stay fast.
-        self.sample_counter += 1
+            # Decide which UI updates are needed while state is synchronized.
+            self.sample_counter += 1
+            emit_emg = (
+                self.sample_counter == 1
+                or self.sample_counter % self.EMG_LABEL_STRIDE == 0
+            )
+            emit_plot = (
+                self.sample_counter == 1
+                or self.sample_counter % self.PLOT_DOWNSAMPLE == 0
+            )
+            emit_pred = (
+                pred_class != self.last_pred_ui
+                or button_state != self.last_button_ui
+            )
+            if emit_pred:
+                self.last_pred_ui = pred_class
+                self.last_button_ui = button_state
 
-        if self.sample_counter == 1 or (self.sample_counter % self.EMG_LABEL_STRIDE == 0):
+        if emit_emg:
             self.emg_sig.emit(ch1, ch2, ch3)
-
-        if self.sample_counter == 1 or (self.sample_counter % self.PLOT_DOWNSAMPLE == 0):
+        if emit_plot:
             self.plot_sig.emit(ch1, ch2, ch3)
-
-        if pred_class != self.last_pred_ui or button_state != self.last_button_ui:
-            self.last_pred_ui = pred_class
-            self.last_button_ui = button_state
+        if emit_pred:
             self.pred_sig.emit(pred_class, button_state)
 
     # ---------- Slots (GUI thread) ----------
@@ -969,7 +1217,8 @@ class RealTimeTestApp(QtWidgets.QWidget):
     @QtCore.pyqtSlot(object, int)
     def update_pred_labels(self, pred_class, button_state):
         self.pred_label.setText(f"Last prediction: {pred_class}")
-        self.button_label.setText(f"Last button: {button_state}")
+        button_text = "N/A" if button_state < 0 else str(button_state)
+        self.button_label.setText(f"Last button: {button_text}")
 
     @QtCore.pyqtSlot(float, float, float)
     def on_plot_sample(self, ch1, ch2, ch3):
@@ -992,26 +1241,65 @@ class RealTimeTestApp(QtWidgets.QWidget):
             return
 
         x = list(self.plot_x)
-        self.plot_curve1.setData(x, list(self.plot_ch1))
-        self.plot_curve2.setData(x, list(self.plot_ch2))
-        self.plot_curve3.setData(x, list(self.plot_ch3))
+        ch1 = list(self.plot_ch1)
+        ch2 = list(self.plot_ch2)
+        ch3 = list(self.plot_ch3)
+        self.plot_curve1.setData(x, ch1)
+        self.plot_curve2.setData(x, ch2)
+        self.plot_curve3.setData(x, ch3)
+
+        # EMG rests around a DC baseline, so a fixed 0..3 V range makes real
+        # changes look flat. Keep a small minimum span and follow the live data.
+        low = min(min(ch1), min(ch2), min(ch3))
+        high = max(max(ch1), max(ch2), max(ch3))
+        center = (low + high) / 2.0
+        span = max((high - low) * 1.25, EMG_MIN_SPAN)
+        self.emg_plot.setYRange(
+            max(0.0, center - span / 2.0),
+            min(3.1, center + span / 2.0),
+            padding=0,
+        )
 
     # ---------- Cleanup ----------
 
     def closeEvent(self, event):
+        self._closing = True
         try:
-            # stop any ongoing recording
-            if self.camera.recording:
-                self.camera.stop_recording()
-            # stop camera thread
-            if self.camera.running:
-                self.camera.stop()
-            # stop microphone
-            if self.audio.running:
-                self.audio.stop()
-            # stop EMG stuff
-            self.serial.stop_stream(stop_char=b'v')
-            self.serial.close()
+            self.cam_timer.stop()
+            self.plot_timer.stop()
+
+            if self.collecting:
+                try:
+                    self.handle_stop()
+                except Exception:
+                    logging.exception("Failed to finalize the active trial during shutdown.")
+
+            for name, action in (
+                ("camera", self.camera.stop),
+                ("microphone", self.audio.stop),
+                ("serial stream", self.serial.stop_stream),
+                ("serial port", self.serial.close),
+            ):
+                try:
+                    if name == "camera" and not (
+                        self.camera.running or self.camera.recording or self.camera.cap is not None
+                    ):
+                        continue
+                    if name == "microphone" and not self.audio.running:
+                        continue
+                    if name == "serial stream" and not self.serial.running:
+                        continue
+                    action()
+                except Exception:
+                    logging.exception("Failed to stop %s cleanly.", name)
+
+            # This also covers a partial failure inside handle_stop().
+            with self._trial_lock:
+                self.collecting = False
+                self.t0_ns = None
+                self._close_trial_files()
+
+            self._wait_for_mux_threads()
         finally:
             super().closeEvent(event)
 
@@ -1020,6 +1308,20 @@ def main():
     from pathlib import Path
     import sys
 
+    # VS Code's Code Runner may expose a Windows CP-1252 stdout stream.  Several
+    # log messages contain emoji, so configure the stream before logging creates
+    # its console handler.  backslashreplace keeps shutdown reliable even if a
+    # host ignores the requested UTF-8 encoding.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+            except (AttributeError, OSError, ValueError):
+                try:
+                    stream.reconfigure(errors="backslashreplace")
+                except (AttributeError, OSError, ValueError):
+                    pass
+
     # Where to save the log file
     log_dir = Path("realtimetest_logs")
     log_dir.mkdir(exist_ok=True)
@@ -1027,18 +1329,29 @@ def main():
 
     # Configure logging to both file and console
     logging.basicConfig(
-        level=logging.DEBUG,  # so you see spike messages too
+        level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[
             logging.FileHandler(log_file, mode="w", encoding="utf-8"),
             logging.StreamHandler(sys.stdout),
         ],
+        force=True,
     )
 
     logging.info(f"Logging to file: {log_file}")
+    if _sounddevice_import_error is not None:
+        logging.warning(
+            "sounddevice unavailable; microphone disabled: %s",
+            _sounddevice_import_error,
+        )
+    if _imageio_ffmpeg_import_error is not None:
+        logging.warning(
+            "imageio_ffmpeg unavailable; audio will not be muxed into video: %s",
+            _imageio_ffmpeg_import_error,
+        )
 
     app = QtWidgets.QApplication(sys.argv)
-    w = RealTimeTestApp(port='COM8', baudrate=500000)
+    w = RealTimeTestApp(port='/dev/cu.usbmodem1203', baudrate=500000)
     w.resize(700, 550)
     w.show()
     sys.exit(app.exec_())
