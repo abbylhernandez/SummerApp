@@ -160,9 +160,27 @@ class TrialLoggerApp(QtWidgets.QWidget):
         # completed-trial labels row
         comp_box = QtWidgets.QHBoxLayout()
         comp_box.addWidget(QtWidgets.QLabel("Completed:"))
-        self.labels_layout = QtWidgets.QHBoxLayout()
-        comp_box.addLayout(self.labels_layout)
-        comp_box.addStretch(1)
+
+        # Keep completed-trial buttons from increasing the main window's
+        # minimum width. Older trials remain available by scrolling sideways.
+        self.labels_widget = QtWidgets.QWidget()
+        self.labels_layout = QtWidgets.QHBoxLayout(self.labels_widget)
+        self.labels_layout.setContentsMargins(0, 0, 0, 0)
+        self.labels_layout.setSpacing(6)
+        self.labels_layout.addStretch(1)
+
+        self.labels_scroll = QtWidgets.QScrollArea()
+        self.labels_scroll.setWidget(self.labels_widget)
+        self.labels_scroll.setWidgetResizable(True)
+        self.labels_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.labels_scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.labels_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        self.labels_scroll.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed
+        )
+        self.labels_scroll.setFixedHeight(52)
+        comp_box.addWidget(self.labels_scroll, stretch=1)
+
         self.review_video_btn = QtWidgets.QPushButton("▶ Open trial video")
         self.review_video_btn.setVisible(False)
         self.review_video_btn.clicked.connect(self._open_review_video)
@@ -430,7 +448,8 @@ class TrialLoggerApp(QtWidgets.QWidget):
         btn = QtWidgets.QPushButton(f"{self.current_obj} Trial {self.trial_num} ✓")
         btn.setCursor(QtCore.Qt.PointingHandCursor)
         btn.setToolTip("Click to view this trial's graphs")
-        self.labels_layout.addWidget(btn)
+        # Insert before the trailing stretch so buttons stay left-aligned.
+        self.labels_layout.insertWidget(self.labels_layout.count() - 1, btn)
         self.trial_labels[key] = btn
         btn.clicked.connect(lambda _=False, k=key: self._open_review(k))
         self._restyle_trial_buttons()
