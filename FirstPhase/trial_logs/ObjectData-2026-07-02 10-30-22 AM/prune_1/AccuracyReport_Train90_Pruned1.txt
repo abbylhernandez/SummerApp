@@ -1,9 +1,177 @@
 ============================================================
 PRUNE REPORT  (Train 80% / Test 20%)
 Prune trials per label   : 1
-Root folder (original)   : /Users/jaylanngin/EMGtesting/SummerApp/FirstPhase/trial_logs/ObjectData-2026-07-02 10-30-22 AM
-Prune root (output sets) : /Users/jaylanngin/EMGtesting/SummerApp/FirstPhase/trial_logs/ObjectData-2026-07-02 10-30-22 AM/prune_1
+Root folder (original)   : /Users/abbyhernandez/Desktop/NEES/SummerApp/FirstPhase/trial_logs/ObjectData-2026-07-02 10-30-22 AM
+Prune root (output sets) : /Users/abbyhernandez/Desktop/NEES/SummerApp/FirstPhase/trial_logs/ObjectData-2026-07-02 10-30-22 AM/prune_1
 Only sample sizes <= 1100 are used.
 ============================================================
 SampleSize	BaseTrain(%)	BaseTest(%)	PrunedTrain(%)	PrunedTest(%)
 
+# Object-level cut summary (1-10=obj1, 11-20=obj2, ...):
+#   Label act2:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [10])
+#   Label act1:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [1])
+200	97.92	91.67	100.00	100.00
+# Dataset: ResultClipSizeUp200
+# Removed trials from copy:
+#   act2: act2/trial_10.txt
+#   act1: act1/trial_1.txt
+
+# Object-level cut summary (1-10=obj1, 11-20=obj2, ...):
+#   Label act2:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [10])
+#   Label act1:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [1])
+250	95.31	87.50	100.00	100.00
+# Dataset: ResultClipSizeUp250
+# Removed trials from copy:
+#   act2: act2/trial_10.txt
+#   act1: act1/trial_1.txt
+
+# Object-level cut summary (1-10=obj1, 11-20=obj2, ...):
+#   Label act2:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [10])
+#   Label act1:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [1])
+300	95.00	95.00	100.00	100.00
+# Dataset: ResultClipSizeUp300
+# Removed trials from copy:
+#   act2: act2/trial_10.txt
+#   act1: act1/trial_1.txt
+
+# Object-level cut summary (1-10=obj1, 11-20=obj2, ...):
+#   Label act2:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [10])
+#   Label act1:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [1])
+350	94.79	95.83	100.00	100.00
+# Dataset: ResultClipSizeUp350
+# Removed trials from copy:
+#   act2: act2/trial_10.txt
+#   act1: act1/trial_1.txt
+
+# Object-level cut summary (1-10=obj1, 11-20=obj2, ...):
+#   Label act2:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [10])
+#   Label act1:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [1])
+400	94.64	100.00	100.00	100.00
+# Dataset: ResultClipSizeUp400
+# Removed trials from copy:
+#   act2: act2/trial_10.txt
+#   act1: act1/trial_1.txt
+
+# Object-level cut summary (1-10=obj1, 11-20=obj2, ...):
+#   Label act2:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [10])
+#   Label act1:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [1])
+450	93.75	96.88	100.00	100.00
+# Dataset: ResultClipSizeUp450
+# Removed trials from copy:
+#   act2: act2/trial_10.txt
+#   act1: act1/trial_1.txt
+
+# Object-level cut summary (1-10=obj1, 11-20=obj2, ...):
+#   Label act2:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [10])
+#   Label act1:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [1])
+500	94.44	100.00	99.21	100.00
+# Dataset: ResultClipSizeUp500
+# Removed trials from copy:
+#   act2: act2/trial_10.txt
+#   act1: act1/trial_1.txt
+
+# Object-level cut summary (1-10=obj1, 11-20=obj2, ...):
+#   Label act2:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [10])
+#   Label act1:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [1])
+550	93.12	92.50	99.29	97.50
+# Dataset: ResultClipSizeUp550
+# Removed trials from copy:
+#   act2: act2/trial_10.txt
+#   act1: act1/trial_1.txt
+
+# Object-level cut summary (1-10=obj1, 11-20=obj2, ...):
+#   Label act2:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [10])
+#   Label act1:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [1])
+600	94.32	97.73	99.35	100.00
+# Dataset: ResultClipSizeUp600
+# Removed trials from copy:
+#   act2: act2/trial_10.txt
+#   act1: act1/trial_1.txt
+
+# Object-level cut summary (1-10=obj1, 11-20=obj2, ...):
+#   Label act2:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [10])
+#   Label act1:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [1])
+650	92.71	89.58	98.21	95.83
+# Dataset: ResultClipSizeUp650
+# Removed trials from copy:
+#   act2: act2/trial_10.txt
+#   act1: act1/trial_1.txt
+
+# Object-level cut summary (1-10=obj1, 11-20=obj2, ...):
+#   Label act2:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [10])
+#   Label act1:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [1])
+700	92.79	96.15	97.25	100.00
+# Dataset: ResultClipSizeUp700
+# Removed trials from copy:
+#   act2: act2/trial_10.txt
+#   act1: act1/trial_1.txt
+
+# Object-level cut summary (1-10=obj1, 11-20=obj2, ...):
+#   Label act2:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [10])
+#   Label act1:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [2])
+750	90.62	85.71	96.43	96.43
+# Dataset: ResultClipSizeUp750
+# Removed trials from copy:
+#   act2: act2/trial_10.txt
+#   act1: act1/trial_2.txt
+
+# Object-level cut summary (1-10=obj1, 11-20=obj2, ...):
+#   Label act2:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [10])
+#   Label act1:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [3])
+800	89.17	93.33	93.81	98.33
+# Dataset: ResultClipSizeUp800
+# Removed trials from copy:
+#   act2: act2/trial_10.txt
+#   act1: act1/trial_3.txt
+
+# Object-level cut summary (1-10=obj1, 11-20=obj2, ...):
+#   Label act2:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [10])
+#   Label act1:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [3])
+900	86.76	88.24	92.02	95.59
+# Dataset: ResultClipSizeUp900
+# Removed trials from copy:
+#   act2: act2/trial_10.txt
+#   act1: act1/trial_3.txt
+
+# Object-level cut summary (1-10=obj1, 11-20=obj2, ...):
+#   Label act2:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [10])
+#   Label act1:
+#     Object 1: removed 1/8 = 12.5% (trials removed: [10])
+1000	84.54	85.53	94.36	94.74
+# Dataset: ResultClipSizeUp1000
+# Removed trials from copy:
+#   act2: act2/trial_10.txt
+#   act1: act1/trial_10.txt
+
+# Saved accuracy plot: /Users/abbyhernandez/Desktop/NEES/SummerApp/FirstPhase/trial_logs/ObjectData-2026-07-02 10-30-22 AM/prune_1/Accuracy_vs_SampleSize_Train80_Prune1.png
+
+=== End of prune run ===

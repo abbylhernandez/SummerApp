@@ -482,7 +482,7 @@ class EMGVideoViewer(QWidget):
         self.region = None
         self.button_regions = []
         if len(self.emg_times) > 1:
-            self.dt_mean = float(np.mean(np.diff(self.emg_times)))
+            self.dt_mean = float(np.mean(np.diff(self.emg_times))) #average time difference between samples
         else:
             self.dt_mean = 0.0
 

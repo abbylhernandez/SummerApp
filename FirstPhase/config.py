@@ -8,7 +8,8 @@ SIMULATE        = False
 SIM_RATE_HZ     = 1000              # fake sample rate while simulating
 SIM_LEVELS      = (0.5, 1.5, 2.5)   # straight-line value (V) for ch1, ch2, ch3
 
-SERIAL_PORT     = "COM3"            # USB serial port of the EMG microcontroller
+#SERIAL_PORT     = "COM3"            # USB serial port of the EMG microcontroller
+SERIAL_PORT = "/dev/cu.usbmodem11403"   # USB serial port for Apple Macbook (ls /dev/cu.*)
 BAUD_RATE       = 500000
 START_CMD       = b"z"              # 'z' = stream raw ADC (3 ch); 'c' adds prediction RX
 STOP_CMD        = b"v"              # byte sent to MCU to stop streaming

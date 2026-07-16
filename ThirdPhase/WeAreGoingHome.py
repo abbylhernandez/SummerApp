@@ -39,7 +39,6 @@ class trainclass:
         self.scale_zc = 15
         self.scale_mav = 2
 
-
         # === Derived Parameters ===
         self.feature_dim = self.tdfeatureN * self.channel
         self.trial_per_class = 2
@@ -224,10 +223,10 @@ class trainclass:
                     f"{trial_path}:{line_number}: cannot parse EMG value '{tok}'"
                 ) from e
         return vals
-
-    # -------------------------------------------------
+    
+     # =================================================
     # TRIAL INFO: old + new EMG formats
-    # -------------------------------------------------
+    # =================================================
     def trial_data_info(self, trial_path: Path):
         """
         Given a single trial file in either old/new EMG format,
@@ -264,9 +263,10 @@ class trainclass:
 
         return num_samples, num_channels
 
-    # -------------------------------------------------
+    # =================================================
     # SCAN SET FOLDER: labels/actions and trials
-    # -------------------------------------------------
+    # =================================================
+
     def label_data_info(self):
         """
         Inspect the set folder and return:
@@ -355,9 +355,9 @@ class trainclass:
 
         return expected_num_trials, num_labels, expected_num_samples, expected_num_channels
 
-    # -------------------------------------------------
+    # =================================================
     # TOP-LEVEL: SET DATA INFO
-    # -------------------------------------------------
+    # =================================================
     def set_data_info(self):
         """
         High-level helper:
@@ -456,6 +456,7 @@ class trainclass:
         train_root = set_dir / "Train"
         test_root = set_dir / "Test"
 
+        #if the folder already exists, delete it before creating a new one
         if train_root.exists():
             shutil.rmtree(train_root)
         if test_root.exists():
@@ -1655,7 +1656,7 @@ class trainclass:
 
 if __name__ == "__main__":
     train_obj = trainclass()
-    root_tabledata = r"/Users/jaylanngin/EMGtesting/SummerApp/FirstPhase/trial_logs/ObjectData-2026-07-02 10-30-22 AM"
+    root_tabledata = r"/Users/abbyhernandez/Desktop/NEES/SummerApp/FirstPhase/trial_logs/ObjectData-2026-07-02 10-30-22 AM"
 
     for prune in range(1, 15):  # 1..14
         print(f"\n\n=== Running prune_trials={prune} ===\n")
