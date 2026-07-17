@@ -45,6 +45,12 @@ AUDIO_MIN_SPAN = 0.02              # smallest y-height so silence doesn't over-z
 EMG_MIN_SPAN = 0.10                # show small EMG changes around the ADC baseline
 
 # =========================
+# Serial config
+# =========================
+SERIAL_PORT = "/dev/ttyUSB0"       # serial port for EMG data (Linux/Mac)
+#SERIAL_PORT = "COMM4"              # serial port for EMG data (Windows)
+
+# =========================
 # Theme palettes (mirrors FirstPhase/theme.py)
 # =========================
 THEMES = {
@@ -239,8 +245,14 @@ class CameraCapture:
         self._fps_window_frames = 0
 
     def start(self):
-        # CAP_DSHOW is good for Windows
-        self.cap = cv2.VideoCapture(self.cam_index, cv2.CAP_DSHOW)
+        #detect OS 
+        import platform
+
+        if platform.system() == "Windows":
+            self.cap = cv2.VideoCapture(self.cam_index, cv2.CAP_DSHOW)
+        else:
+            self.cap = cv2.VideoCapture(self.cam_index, cv2.CAP_AVFOUNDATION)
+
         if not self.cap.isOpened():
             logging.error("❌ Failed to open camera.")
             self.cap.release()
@@ -404,7 +416,7 @@ class SerialEMGHandler:
         "2212,1138,2415,2,1"
     """
  
-    def __init__(self, port='COM8', baudrate=500000):
+    def __init__(self, port=SERIAL_PORT, baudrate=500000):
         self.port = port
         self.baudrate = baudrate
         self.ser = None
