@@ -642,7 +642,9 @@ class EMGVideoViewer(QWidget):
 
         audio_pen = pg.mkPen((255, 220, 0), width=2)
         self.curve_audio = pg.PlotCurveItem(pen=audio_pen, name="audio")
-        self.audio_view.addItem(self.curve_audio)
+        
+        # Uncomment this line to show the audio signal over the EMG graph.
+        # self.audio_view.addItem(self.curve_audio)
 
         self.plot_widget.getViewBox().sigResized.connect(self._sync_audio_view)
         self._sync_audio_view()
