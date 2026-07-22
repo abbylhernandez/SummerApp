@@ -147,6 +147,7 @@ class TrialLoggerApp(QtWidgets.QWidget):
         self.plot_widget = pg.PlotWidget()
         self.plot_widget.setLabel("left", "EMG (V)")
         self.plot_widget.setLabel("bottom", "Time (s)")
+        self.plot_widget.setYRange(-0.5, 3.5, padding=0)
         self.plot_widget.setYRange(EMG_Y_MIN, EMG_Y_MAX, padding=0)
         self._legend = self.plot_widget.addLegend(offset=(10, 10))
         self.curve1 = self.plot_widget.plot([], [], pen=pg.mkPen(CH_COLORS[0], width=2), name="ch1")

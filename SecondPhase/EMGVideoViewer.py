@@ -112,6 +112,7 @@ def find_trials_in_folder(folder):
         + glob.glob(os.path.join(folder, "audio*.wav"))
     )
 
+    # Extract all trial numbers from each file type
     txt_nums = {extract_num_generic(p, ("trial",)): p for p in txt_files}
     vid_nums = {extract_num_generic(p, ("video", "trial")): p for p in video_files}
     audio_nums = {extract_num_generic(p, ("audio",)): p for p in audio_files}
@@ -1170,7 +1171,6 @@ def main():
     if not os.path.isdir(trial_logs_root):
         print(f"Folder does not exist: {trial_logs_root}")
         return
-
 
     trials = find_trials_under_root(trial_logs_root)
     if not trials:

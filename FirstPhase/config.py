@@ -9,7 +9,7 @@ SIM_RATE_HZ     = 1000              # fake sample rate while simulating
 SIM_LEVELS      = (0.5, 1.5, 2.5)   # straight-line value (V) for ch1, ch2, ch3
 
 #SERIAL_PORT     = "COM3"            # USB serial port of the EMG microcontroller
-SERIAL_PORT = "/dev/cu.usbmodem11403"   # USB serial port for Apple Macbook (ls /dev/cu.*)
+SERIAL_PORT = "/dev/cu.usbmodem21403"   # USB serial port for Apple Macbook (ls /dev/cu.*)
 BAUD_RATE       = 500000
 START_CMD       = b"z"              # 'z' = stream raw ADC (3 ch); 'c' adds prediction RX
 STOP_CMD        = b"v"              # byte sent to MCU to stop streaming
@@ -28,8 +28,8 @@ AUDIO_ENV_CHUNK = 441               # samples per envelope point (~10 ms at 44.1
 AUDIO_MIN_SPAN  = 0.02              # smallest height so silence doesn't over-zoom
 
 VREF            = 3.0               # ADC reference voltage
-EMG_Y_MIN       = -0.5              # fixed EMG plot y-axis when Auto Y is off
-EMG_Y_MAX       = 3.5
+EMG_Y_MIN       = 0            # fixed EMG plot y-axis when Auto Y is off
+EMG_Y_MAX       = 2.6
 ADC_RES         = 4095.0            # 12-bit ADC full scale
 ADC_MIN         = 0
 ADC_MAX         = 4095

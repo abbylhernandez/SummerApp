@@ -7,6 +7,7 @@ from pathlib import Path
 import threading
 import queue
 import os
+import re
 from collections import deque
 import time
 
@@ -47,8 +48,7 @@ EMG_MIN_SPAN = 0.10                # show small EMG changes around the ADC basel
 # =========================
 # Serial config
 # =========================
-SERIAL_PORT = "/dev/ttyUSB0"       # serial port for EMG data (Linux/Mac)
-#SERIAL_PORT = "COMM4"              # serial port for EMG data (Windows)
+SERIAL_PORT = "COM5"               # serial port for EMG data (Windows)
 
 # =========================
 # Theme palettes (mirrors FirstPhase/theme.py)
@@ -87,7 +87,52 @@ def build_stylesheet(pal):
     QPushButton:hover {{ border-color: {pal['accent']}; }}
     QPushButton:checked {{ background-color: {pal['accent']}; color: white; }}
     QPushButton:disabled {{ color: gray; border-color: {pal['border']}; }}
+    QGroupBox {{
+        background-color: {pal['panel']}; border: 1px solid {pal['border']};
+        border-radius: 8px; margin-top: 10px; padding-top: 10px;
+        font-weight: bold;
+    }}
+    QGroupBox::title {{ subcontrol-origin: margin; left: 10px; padding: 0 4px; }}
+    QListWidget {{
+        background-color: {pal['panel']}; color: {pal['text']};
+        border: 1px solid {pal['border']}; border-radius: 6px; padding: 4px;
+    }}
+    QFrame#metricCard {{
+        background-color: {pal['panel']}; border: 1px solid {pal['border']};
+        border-radius: 9px;
+    }}
+    QLabel#metricTitle {{ color: {pal['axis']}; font-size: 9px; font-weight: 600; }}
+    QLabel#recordingIndicator {{ color: #ef4444; font-weight: 800; }}
+    QPushButton#startButton {{
+        background-color: #047857; border-color: #34d399;
+        color: white; font-weight: 700;
+    }}
+    QPushButton#startButton:hover {{ background-color: #059669; }}
+    QPushButton#stopButton {{
+        background-color: #991b1b; border-color: #ef4444;
+        color: white; font-weight: 700;
+    }}
+    QPushButton#stopButton:hover {{ background-color: #b91c1c; }}
     """
+
+
+class MetricCard(QtWidgets.QFrame):
+    def __init__(self, title, value, accent):
+        super().__init__()
+        self.setObjectName("metricCard")
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(10, 8, 10, 8)
+        title_label = QtWidgets.QLabel(title.upper())
+        title_label.setObjectName("metricTitle")
+        self.value_label = QtWidgets.QLabel(value)
+        self.value_label.setStyleSheet(
+            f"color: {accent}; font-size: 19px; font-weight: 700;"
+        )
+        layout.addWidget(title_label)
+        layout.addWidget(self.value_label)
+
+    def set_value(self, value):
+        self.value_label.setText(value)
 
 
 # =========================
@@ -398,22 +443,16 @@ class SerialEMGHandler:
     """
     Talks to STM32 over USART2.
 
-    MCU sends either of these line formats:
+    MCU sends this line format:
 
-        "%d,%d,%d,%c,%d\r\n"
         "%d,%d,%d,%c\r\n"
 
-    That is:
-
-        ch1_raw, ch2_raw, ch3_raw, pred_char, button
-        ch1_raw, ch2_raw, ch3_raw, pred_char
-
-    In the current firmware, pred_char is the byte received by the MCU on
-    UART5_RX (PD2). Four-field packets do not contain a button value.
+    That is: ch1_raw, ch2_raw, ch3_raw, pred_char. In the current
+    firmware, pred_char is the byte received by the MCU on UART5_RX (PD2).
 
     Example:
 
-        "2212,1138,2415,2,1"
+        "2212,1138,2415,2"
     """
  
     def __init__(self, port=SERIAL_PORT, baudrate=500000):
@@ -424,10 +463,10 @@ class SerialEMGHandler:
         self.running = False
 
         # Callbacks:
-        #   sample_callback(timestamp_str, ch1_v, ch2_v, ch3_v, pred_class_or_char, button)
+        #   sample_callback(timestamp_str, ch1_v, ch2_v, ch3_v, pred_class_or_char)
         # Backward compatibility:
         #   emg_callback(timestamp_str, ch1_v, ch2_v, ch3_v)
-        #   pred_callback(timestamp_str, pred_class_or_char, button)
+        #   pred_callback(timestamp_str, pred_class_or_char)
         self.sample_callback = None
         self.emg_callback = None
         self.pred_callback = None
@@ -568,14 +607,9 @@ class SerialEMGHandler:
 
                 try:
                     parts = [p.strip() for p in line.split(',')]
-                    if len(parts) == 5:
-                        a, b, c, pred_token, button_token = parts
-                    elif len(parts) == 4:
-                        # Current MCU packet: EMG + prediction from UART5_RX (PD2).
-                        a, b, c, pred_token = parts
-                        button_token = None
-                    else:
-                        raise ValueError(f"expected 4 or 5 fields, got {len(parts)}")
+                    if len(parts) != 4:
+                        raise ValueError(f"expected 4 fields, got {len(parts)}")
+                    a, b, c, pred_token = parts
 
                     # ---------- Parse and validate ADC fields ----------
                     vals = []
@@ -617,14 +651,6 @@ class SerialEMGHandler:
                             f"⚠️ pred_token has extra chars: {pred_token!r}, using {pred_char!r}"
                         )
 
-                    # ---------- Parse button state ----------
-                    if button_token is None:
-                        button_state = -1  # no button field in the 4-column packet
-                    else:
-                        if not button_token.isdigit():
-                            raise ValueError(f"button token is not digits: {button_token!r}")
-                        button_state = int(button_token)
-
                     # ---------- Convert to voltages ----------
                     ch1_v = (ch1_raw / ADC_RES) * VREF - MIDPOINT
                     ch2_v = (ch2_raw / ADC_RES) * VREF - MIDPOINT
@@ -658,14 +684,13 @@ class SerialEMGHandler:
                             ch2_v,
                             ch3_v,
                             pred_val,
-                            button_state,
                         )
                     else:
                         # Fallback to older split callbacks.
                         if self.emg_callback:
                             self.emg_callback(now_str, ch1_v, ch2_v, ch3_v)
                         if self.pred_callback:
-                            self.pred_callback(now_str, pred_val, button_state)
+                            self.pred_callback(now_str, pred_val)
 
                     self._parsed_sample_count += 1
 
@@ -684,18 +709,19 @@ class SerialEMGHandler:
 # RealTimeTestApp (EMG + camera + video)
 # =========================
 class RealTimeTestApp(QtWidgets.QWidget):
-    PLOT_DOWNSAMPLE = 30
-    PLOT_MAX_POINTS = 180
-    PLOT_UPDATE_MS = 250
+    PLOT_DOWNSAMPLE = 5
+    PLOT_MAX_POINTS = 1200
+    PLOT_UPDATE_MS = 50
+    PLOT_WINDOW_S = 5.0
     EMG_LABEL_STRIDE = 10
 
     # Signals to safely update GUI from callbacks (background thread)
     emg_sig = QtCore.pyqtSignal(float, float, float)
     plot_sig = QtCore.pyqtSignal(float, float, float)
-    pred_sig = QtCore.pyqtSignal(object, int)
+    pred_sig = QtCore.pyqtSignal(object)
     mux_done_sig = QtCore.pyqtSignal(int, bool, str)
 
-    def __init__(self, port='/dev/cu.usbmodem1203', baudrate=500000, parent=None):
+    def __init__(self, port=SERIAL_PORT, baudrate=500000, parent=None):
         super().__init__(parent)
 
         self.setWindowTitle("Real-Time EMG + Prediction + Video")
@@ -713,45 +739,52 @@ class RealTimeTestApp(QtWidgets.QWidget):
 
         # Microphone
         self.audio = AudioCapture()
-
-        # Start camera ONCE at app startup
-        if self.camera.start():
-            self.cam_timer.start(30)
-        else:
-            QtWidgets.QMessageBox.warning(self, "Camera Error", "Could not start camera.")
-
-        # Start microphone ONCE at app startup
-        self.audio_available = self.audio.start()
+        self.audio_available = False
 
         # Files
         self.collecting = False
         self.current_set_dir: Path | None = None
         self.emg_file = None
         self.pred_file = None
-        self.button_file = None
-        self.t0_ns = None
         self.sample_counter = 0
         self.last_pred_ui = None
-        self.last_button_ui = None
         self._trial_lock = threading.Lock()
         self._mux_lock = threading.Lock()
         self._mux_threads = []
         self._closing = False
+        self._pending_trial_names = {}
+        self._saved_trial_items = {}
+        self._finalized_trial_names = {}
 
         # Plot buffers (kept intentionally small for low-resolution plotting)
         self.plot_x = deque(maxlen=self.PLOT_MAX_POINTS)
         self.plot_ch1 = deque(maxlen=self.PLOT_MAX_POINTS)
         self.plot_ch2 = deque(maxlen=self.PLOT_MAX_POINTS)
         self.plot_ch3 = deque(maxlen=self.PLOT_MAX_POINTS)
-        self.plot_point_idx = 0
+        self._plot_t0 = time.perf_counter()
+        self._plot_y_range = None
 
         # ---------- NEW SAVING STRUCTURE ----------
         # Root folder
         self.base_dir = Path("realtimetest")
         self.base_dir.mkdir(exist_ok=True)
 
-        # Create one session folder when app opens
-        session_name = datetime.now().strftime("SESSION_%Y%m%d_%H%M%S")
+        # Create one named session folder when the app opens.
+        default_session = datetime.now().strftime("SESSION_%Y%m%d_%H%M%S")
+        entered_name, accepted = QtWidgets.QInputDialog.getText(
+            self,
+            "Name session",
+            "Enter a name for this recording folder:",
+            QtWidgets.QLineEdit.Normal,
+            default_session,
+        )
+        session_name = self._safe_name(entered_name if accepted else default_session)
+        candidate = session_name
+        suffix = 2
+        while (self.base_dir / candidate).exists():
+            candidate = f"{session_name}_{suffix}"
+            suffix += 1
+        session_name = candidate
         self.session_dir = self.base_dir / session_name
         self.session_dir.mkdir(parents=True, exist_ok=True)
 
@@ -764,17 +797,34 @@ class RealTimeTestApp(QtWidgets.QWidget):
         # ------------------------------------------
 
         # --- UI widgets ---
-        self.start_btn = QtWidgets.QPushButton("Start (mode 'c')")
-        self.stop_btn = QtWidgets.QPushButton("Stop (send 'v')")
+        self.title_lbl = QtWidgets.QLabel("Real-Time Recording")
+        self.title_lbl.setStyleSheet("font-size: 22px; font-weight: bold;")
+        self.session_lbl = QtWidgets.QLabel(f"Session: {session_name}")
+        self.start_btn = QtWidgets.QPushButton("Start Recording")
+        self.start_btn.setObjectName("startButton")
+        self.stop_btn = QtWidgets.QPushButton("Stop Recording")
+        self.stop_btn.setObjectName("stopButton")
         self.theme_btn = QtWidgets.QPushButton("Dark")
         self.status_lbl = QtWidgets.QLabel("Status: Idle")
-        self.pred_label = QtWidgets.QLabel("Last prediction: -")
-        self.button_label = QtWidgets.QLabel("Last button: -")
-        self.emg_label = QtWidgets.QLabel("Last EMG: -")
+        self.recording_indicator = QtWidgets.QLabel("● RECORDING")
+        self.recording_indicator.setObjectName("recordingIndicator")
+        self.recording_indicator.setVisible(False)
+        self.pred_card = MetricCard("Prediction", "—", "#fbbf24")
+        self.ch1_card = MetricCard("Channel 1", "— V", CH_COLORS[0])
+        self.ch2_card = MetricCard("Channel 2", "— V", CH_COLORS[1])
+        self.ch3_card = MetricCard("Channel 3", "— V", CH_COLORS[2])
         self.video_label = QtWidgets.QLabel("Camera starting...")
         self.video_label.setFixedSize(640, 360)
         self.video_label.setAlignment(QtCore.Qt.AlignCenter)
         self.video_label.setStyleSheet("background-color: black; color: white;")
+
+        self.saved_trials = QtWidgets.QListWidget()
+        self.saved_trials.setMaximumHeight(105)
+        self.saved_trials.setAlternatingRowColors(True)
+        self.saved_trials.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        empty_item = QtWidgets.QListWidgetItem("No recordings saved in this session yet.")
+        empty_item.setFlags(QtCore.Qt.NoItemFlags)
+        self.saved_trials.addItem(empty_item)
 
         pg.setConfigOptions(antialias=False)
 
@@ -789,43 +839,85 @@ class RealTimeTestApp(QtWidgets.QWidget):
         if not self.audio_available:
             self.audio_plot.setTitle("Microphone unavailable")
 
-        # Low-cost EMG plot (downsampled + timer-driven redraw)
+        # Rolling EMG plot with a real time axis.
         self.emg_plot = pg.PlotWidget()
-        self.emg_plot.setFixedHeight(170)
+        self.emg_plot.setMinimumHeight(250)
+        self.emg_plot.setTitle("EMG Channels")
         self.emg_plot.setLabel("left", "EMG (V)")
-        self.emg_plot.setLabel("bottom", "Low-res index")
-        self.emg_plot.setYRange(0.0, 3.0, padding=0)
-        self.emg_plot.getPlotItem().setDownsampling(auto=False, ds=1, mode='peak')
+        self.emg_plot.setLabel("bottom", "Time (s)")
+        self.emg_plot.setYRange(0.0, 3.1, padding=0)
+        self.emg_plot.setMouseEnabled(x=False, y=False)
+        self.emg_plot.getPlotItem().setDownsampling(auto=True, mode="peak")
         self.emg_plot.getPlotItem().setClipToView(True)
         self._legend = self.emg_plot.addLegend(offset=(10, 10))
 
-        self.plot_curve1 = self.emg_plot.plot([], [], pen=pg.mkPen(CH_COLORS[0], width=2), name="ch1")
-        self.plot_curve2 = self.emg_plot.plot([], [], pen=pg.mkPen(CH_COLORS[1], width=2), name="ch2")
-        self.plot_curve3 = self.emg_plot.plot([], [], pen=pg.mkPen(CH_COLORS[2], width=2), name="ch3")
+        self.plot_curve1 = self.emg_plot.plot(
+            [], [], pen=pg.mkPen(CH_COLORS[0], width=1.6), name="Channel 1"
+        )
+        self.plot_curve2 = self.emg_plot.plot(
+            [], [], pen=pg.mkPen(CH_COLORS[1], width=1.6), name="Channel 2"
+        )
+        self.plot_curve3 = self.emg_plot.plot(
+            [], [], pen=pg.mkPen(CH_COLORS[2], width=1.6), name="Channel 3"
+        )
 
         # Layout
         top_row = QtWidgets.QHBoxLayout()
-        top_row.addWidget(self.status_lbl, stretch=1)
+        heading = QtWidgets.QVBoxLayout()
+        heading.addWidget(self.title_lbl)
+        heading.addWidget(self.session_lbl)
+        top_row.addLayout(heading, stretch=1)
         top_row.addWidget(self.theme_btn)
 
         btn_layout = QtWidgets.QHBoxLayout()
         self.start_btn.setMinimumHeight(34)
         self.stop_btn.setMinimumHeight(34)
+        self.stop_btn.setEnabled(False)
         btn_layout.addWidget(self.start_btn)
         btn_layout.addWidget(self.stop_btn)
 
-        label_layout = QtWidgets.QVBoxLayout()
-        label_layout.addWidget(self.pred_label)
-        label_layout.addWidget(self.button_label)
-        label_layout.addWidget(self.emg_label)
-
         main_layout = QtWidgets.QVBoxLayout()
+        main_layout.setContentsMargins(16, 14, 16, 16)
+        main_layout.setSpacing(10)
         main_layout.addLayout(top_row)
-        main_layout.addLayout(btn_layout)
-        main_layout.addLayout(label_layout)
-        main_layout.addWidget(self.video_label, alignment=QtCore.Qt.AlignHCenter)
-        main_layout.addWidget(self.audio_plot)
-        main_layout.addWidget(self.emg_plot)
+
+        live_row = QtWidgets.QHBoxLayout()
+        live_row.setSpacing(12)
+        camera_box = QtWidgets.QGroupBox("Live camera")
+        camera_layout = QtWidgets.QVBoxLayout(camera_box)
+        camera_layout.addWidget(self.video_label, alignment=QtCore.Qt.AlignCenter)
+        live_row.addWidget(camera_box, stretch=3)
+
+        side_panel = QtWidgets.QVBoxLayout()
+        status_box = QtWidgets.QGroupBox("Recording controls")
+        status_layout = QtWidgets.QVBoxLayout(status_box)
+        status_top = QtWidgets.QHBoxLayout()
+        status_top.addWidget(self.status_lbl, stretch=1)
+        status_top.addWidget(self.recording_indicator)
+        status_layout.addLayout(status_top)
+        status_layout.addLayout(btn_layout)
+        side_panel.addWidget(status_box)
+
+        signal_box = QtWidgets.QGroupBox("Live values")
+        signal_layout = QtWidgets.QGridLayout(signal_box)
+        signal_layout.addWidget(self.pred_card, 0, 0, 1, 2)
+        signal_layout.addWidget(self.ch1_card, 1, 0)
+        signal_layout.addWidget(self.ch2_card, 1, 1)
+        signal_layout.addWidget(self.ch3_card, 2, 0, 1, 2)
+        side_panel.addWidget(signal_box)
+
+        saved_box = QtWidgets.QGroupBox("Saved recordings")
+        saved_layout = QtWidgets.QVBoxLayout(saved_box)
+        saved_layout.addWidget(self.saved_trials)
+        side_panel.addWidget(saved_box, stretch=1)
+        live_row.addLayout(side_panel, stretch=2)
+        main_layout.addLayout(live_row)
+
+        plots_box = QtWidgets.QGroupBox("Live signals")
+        plots_layout = QtWidgets.QVBoxLayout(plots_box)
+        plots_layout.addWidget(self.audio_plot)
+        plots_layout.addWidget(self.emg_plot)
+        main_layout.addWidget(plots_box, stretch=1)
         self.setLayout(main_layout)
 
         # Connections
@@ -843,6 +935,18 @@ class RealTimeTestApp(QtWidgets.QWidget):
         self.plot_timer.start(self.PLOT_UPDATE_MS)
 
         self._apply_theme(self._theme_name)
+
+        # Start hardware only after the session has been named and the UI exists.
+        if self.camera.start():
+            self.cam_timer.start(30)
+        else:
+            self.video_label.setText("Camera unavailable")
+            QtWidgets.QMessageBox.warning(self, "Camera Error", "Could not start camera.")
+
+        self.audio_available = self.audio.start()
+        self.audio_plot.setTitle(
+            "Microphone" if self.audio_available else "Microphone unavailable"
+        )
 
     # ---------- Theme ----------
 
@@ -871,7 +975,7 @@ class RealTimeTestApp(QtWidgets.QWidget):
         )
         self.audio_plot.setLabel("left", "Amplitude", color=pal["axis"])
         self.emg_plot.setLabel("left", "EMG (V)", color=pal["axis"])
-        self.emg_plot.setLabel("bottom", "Low-res index", color=pal["axis"])
+        self.emg_plot.setLabel("bottom", "Time (s)", color=pal["axis"])
         try:
             self._legend.setLabelTextColor(pal["axis"])
         except Exception:
@@ -879,8 +983,13 @@ class RealTimeTestApp(QtWidgets.QWidget):
 
     # ---------- Start / Stop ----------
 
+    @staticmethod
+    def _safe_name(name):
+        safe = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name.strip())
+        return safe.rstrip(" .") or "recording"
+
     def _close_trial_files(self):
-        for attr in ("emg_file", "pred_file", "button_file"):
+        for attr in ("emg_file", "pred_file"):
             handle = getattr(self, attr)
             if handle is None:
                 continue
@@ -906,9 +1015,6 @@ class RealTimeTestApp(QtWidgets.QWidget):
 
         # Prediction file in predictions subfolder: trial_1.txt, trial_2.txt, ...
         pred_path = self.predictions_dir / f"trial_{trial_idx}.txt"
-        # Button file in session folder: button_1.txt, button_2.txt, ...
-        button_path = self.current_set_dir / f"button_{trial_idx}.txt"
-
         # Open all files before enabling the MCU. A partial open is rolled back.
         opened = []
         try:
@@ -916,30 +1022,26 @@ class RealTimeTestApp(QtWidgets.QWidget):
             opened.append(self.emg_file)
             self.pred_file = open(pred_path, "w", buffering=1, encoding="utf-8")
             opened.append(self.pred_file)
-            self.button_file = open(button_path, "w", buffering=1, encoding="utf-8")
-            opened.append(self.button_file)
             self.emg_file.write("timestamp\tch1\tch2\tch3\n")
-            self.pred_file.write("timestamp\tclass\tbutton\n")
-            self.button_file.write("t_ns,button\n")
+            self.pred_file.write("timestamp\tclass\n")
         except Exception as e:
             for handle in opened:
                 try:
                     handle.close()
                 except Exception:
                     pass
-            self.emg_file = self.pred_file = self.button_file = None
+            self.emg_file = self.pred_file = None
             logging.error("Could not create trial files: %s", e)
             QtWidgets.QMessageBox.critical(self, "Recording Error", str(e))
             return
 
         with self._trial_lock:
             self.trial_counter = trial_idx
-            self.t0_ns = time.perf_counter_ns()
             self.collecting = True
             self.sample_counter = 0
             self.last_pred_ui = None
-            self.last_button_ui = None
-        self.plot_point_idx = 0
+        self._plot_t0 = time.perf_counter()
+        self._plot_y_range = None
         self.plot_x.clear()
         self.plot_ch1.clear()
         self.plot_ch2.clear()
@@ -949,7 +1051,6 @@ class RealTimeTestApp(QtWidgets.QWidget):
         if not self.serial.start_stream(mode_char=b'c'):
             with self._trial_lock:
                 self.collecting = False
-                self.t0_ns = None
                 self._close_trial_files()
                 self.trial_counter -= 1
             self.status_lbl.setText("Status: Serial connection failed.")
@@ -974,9 +1075,10 @@ class RealTimeTestApp(QtWidgets.QWidget):
                 self.current_set_dir / f"_audio_{trial_idx}.wav"
             )
 
-        self.pred_label.setText("Last prediction: -")
-        self.button_label.setText("Last button: -")
-        self.emg_label.setText("Last EMG: -")
+        self.pred_card.set_value("—")
+        self.ch1_card.set_value("— V")
+        self.ch2_card.set_value("— V")
+        self.ch3_card.set_value("— V")
         self.audio_curve.setData([], [])
 
         unavailable = []
@@ -986,6 +1088,9 @@ class RealTimeTestApp(QtWidgets.QWidget):
             unavailable.append("audio unavailable")
         suffix = f" ({', '.join(unavailable)})" if unavailable else ""
         self.status_lbl.setText(f"Status: Logging trial {trial_idx}…{suffix}")
+        self.start_btn.setEnabled(False)
+        self.stop_btn.setEnabled(True)
+        self.recording_indicator.setVisible(True)
         logging.info(f"✅ Started new trial {trial_idx} in {self.current_set_dir}")
 
     def handle_stop(self):
@@ -995,28 +1100,86 @@ class RealTimeTestApp(QtWidgets.QWidget):
         with self._trial_lock:
             trial_idx = self.trial_counter
             self.collecting = False
+        self.start_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
+        self.recording_indicator.setVisible(False)
 
         # Stop serial stream
         self.serial.stop_stream(stop_char=b'v')
 
-        # Close EMG / prediction / button files
+        # Close EMG and prediction files
         with self._trial_lock:
             self._close_trial_files()
-            self.t0_ns = None
-        logging.info("🛑 Stopped EMG/prediction/button recording.")
+        logging.info("🛑 Stopped EMG/prediction recording.")
 
         # Stop video recording only (keep camera running)
         if self.camera.recording:
             self.camera.stop_recording()
 
-        # Stop audio, write the envelope CSV, and mux the WAV into the video
+        # Stop audio, write the envelope CSV, and mux the WAV into the video.
+        # Ask for the friendly name only after capture has stopped.
         if self.audio_available:
             wav_path = self.audio.stop_recording()
             self._write_audio_envelope(trial_idx)
-            self.status_lbl.setText(f"Status: Trial {trial_idx} saved; finalizing audio…")
-            self._start_audio_mux(trial_idx, wav_path)
         else:
-            self.status_lbl.setText(f"Status: Trial {trial_idx} saved (no audio).")
+            wav_path = None
+
+        self._pending_trial_names[trial_idx] = self._ask_trial_name(trial_idx)
+        display_name = self._pending_trial_names[trial_idx]
+        self.status_lbl.setText(f"Status: Finalizing {display_name}…")
+        self._start_audio_mux(trial_idx, wav_path)
+
+    def _ask_trial_name(self, trial_idx):
+        default = f"trial_{trial_idx}"
+        name, accepted = QtWidgets.QInputDialog.getText(
+            self,
+            "Name recording",
+            "Enter a name for this recording:",
+            QtWidgets.QLineEdit.Normal,
+            default,
+        )
+        if not accepted:
+            return default
+        return self._safe_name(name) if name.strip() else default
+
+    def _finalize_trial_files(self, trial_idx):
+        if trial_idx in self._finalized_trial_names:
+            return self._finalized_trial_names[trial_idx]
+        requested = self._pending_trial_names.pop(trial_idx, f"trial_{trial_idx}")
+        stem = requested
+        suffix = 2
+        while any((
+            (self.session_dir / f"{stem}_emg.txt").exists(),
+            (self.session_dir / f"{stem}.avi").exists(),
+        )):
+            stem = f"{requested}_{suffix}"
+            suffix += 1
+
+        renames = (
+            (self.session_dir / f"trial_{trial_idx}.txt", self.session_dir / f"{stem}_emg.txt"),
+            (self.predictions_dir / f"trial_{trial_idx}.txt", self.predictions_dir / f"{stem}.txt"),
+            (self.session_dir / f"video_{trial_idx}.avi", self.session_dir / f"{stem}.avi"),
+            (self.session_dir / f"audio_{trial_idx}.csv", self.session_dir / f"{stem}_audio.csv"),
+            (self.session_dir / f"_audio_{trial_idx}.wav", self.session_dir / f"{stem}_audio.wav"),
+        )
+        for source, destination in renames:
+            if source.exists() and source != destination:
+                try:
+                    source.replace(destination)
+                except OSError as e:
+                    logging.warning("Could not rename %s to %s: %s", source, destination, e)
+
+        if self.saved_trials.count() == 1:
+            first = self.saved_trials.item(0)
+            if first.flags() == QtCore.Qt.NoItemFlags:
+                self.saved_trials.clear()
+        item = QtWidgets.QListWidgetItem(f"✓  {stem}    (Trial {trial_idx})")
+        item.setToolTip(str(self.session_dir.resolve()))
+        self.saved_trials.addItem(item)
+        self.saved_trials.scrollToBottom()
+        self._saved_trial_items[trial_idx] = item
+        self._finalized_trial_names[trial_idx] = stem
+        return stem
 
     # ---------- Audio persistence ----------
 
@@ -1080,12 +1243,13 @@ class RealTimeTestApp(QtWidgets.QWidget):
 
     @QtCore.pyqtSlot(int, bool, str)
     def _on_mux_done(self, trial_idx, success, message):
+        display_name = self._finalize_trial_files(trial_idx)
         if self._closing or self.collecting or trial_idx != self.trial_counter:
             return
         if success:
-            self.status_lbl.setText(f"Status: Trial {trial_idx} saved.")
+            self.status_lbl.setText(f"Status: {display_name} saved.")
         else:
-            self.status_lbl.setText(f"Status: Trial {trial_idx} saved; {message}.")
+            self.status_lbl.setText(f"Status: {display_name} saved; {message}.")
 
     def _wait_for_mux_threads(self):
         """Wait for in-flight mux jobs so the process cannot abandon a recording."""
@@ -1162,7 +1326,7 @@ class RealTimeTestApp(QtWidgets.QWidget):
 
     # ---------- Callbacks from SerialEMGHandler (background thread) ----------
 
-    def on_sample(self, timestamp_str, ch1, ch2, ch3, pred_class, button_state):
+    def on_sample(self, timestamp_str, ch1, ch2, ch3, pred_class):
         """
         Single per-sample callback from serial parser.
         One line in all files shares exactly the same timestamp.
@@ -1181,19 +1345,9 @@ class RealTimeTestApp(QtWidgets.QWidget):
 
             if self.pred_file is not None:
                 try:
-                    self.pred_file.write(f"{timestamp_str}\t{pred_class}\t{button_state}\n")
+                    self.pred_file.write(f"{timestamp_str}\t{pred_class}\n")
                 except Exception as e:
                     logging.warning(f"⚠️ Failed to write prediction line: {e}")
-
-            if self.button_file is not None:
-                try:
-                    if self.t0_ns is not None:
-                        t_ns = time.perf_counter_ns() - self.t0_ns
-                    else:
-                        t_ns = time.perf_counter_ns()
-                    self.button_file.write(f"{t_ns},{button_state}\n")
-                except Exception as e:
-                    logging.warning(f"⚠️ Failed to write button line: {e}")
 
             # Decide which UI updates are needed while state is synchronized.
             self.sample_counter += 1
@@ -1205,40 +1359,35 @@ class RealTimeTestApp(QtWidgets.QWidget):
                 self.sample_counter == 1
                 or self.sample_counter % self.PLOT_DOWNSAMPLE == 0
             )
-            emit_pred = (
-                pred_class != self.last_pred_ui
-                or button_state != self.last_button_ui
-            )
+            emit_pred = pred_class != self.last_pred_ui
             if emit_pred:
                 self.last_pred_ui = pred_class
-                self.last_button_ui = button_state
 
         if emit_emg:
             self.emg_sig.emit(ch1, ch2, ch3)
         if emit_plot:
             self.plot_sig.emit(ch1, ch2, ch3)
         if emit_pred:
-            self.pred_sig.emit(pred_class, button_state)
+            self.pred_sig.emit(pred_class)
 
     # ---------- Slots (GUI thread) ----------
 
     @QtCore.pyqtSlot(float, float, float)
     def update_emg_label(self, ch1, ch2, ch3):
-        self.emg_label.setText(f"Last EMG: {ch1:.3f}, {ch2:.3f}, {ch3:.3f}")
+        self.ch1_card.set_value(f"{ch1:.3f} V")
+        self.ch2_card.set_value(f"{ch2:.3f} V")
+        self.ch3_card.set_value(f"{ch3:.3f} V")
 
-    @QtCore.pyqtSlot(object, int)
-    def update_pred_labels(self, pred_class, button_state):
-        self.pred_label.setText(f"Last prediction: {pred_class}")
-        button_text = "N/A" if button_state < 0 else str(button_state)
-        self.button_label.setText(f"Last button: {button_text}")
+    @QtCore.pyqtSlot(object)
+    def update_pred_labels(self, pred_class):
+        self.pred_card.set_value(str(pred_class))
 
     @QtCore.pyqtSlot(float, float, float)
     def on_plot_sample(self, ch1, ch2, ch3):
-        self.plot_x.append(self.plot_point_idx)
+        self.plot_x.append(time.perf_counter() - self._plot_t0)
         self.plot_ch1.append(ch1)
         self.plot_ch2.append(ch2)
         self.plot_ch3.append(ch3)
-        self.plot_point_idx += 1
 
     def refresh_plot(self):
         # Live microphone envelope (only while a trial is recording)
@@ -1252,25 +1401,38 @@ class RealTimeTestApp(QtWidgets.QWidget):
         if not self.plot_x:
             return
 
-        x = list(self.plot_x)
-        ch1 = list(self.plot_ch1)
-        ch2 = list(self.plot_ch2)
-        ch3 = list(self.plot_ch3)
+        x = np.asarray(self.plot_x, dtype=float)
+        ch1 = np.asarray(self.plot_ch1, dtype=float)
+        ch2 = np.asarray(self.plot_ch2, dtype=float)
+        ch3 = np.asarray(self.plot_ch3, dtype=float)
         self.plot_curve1.setData(x, ch1)
         self.plot_curve2.setData(x, ch2)
         self.plot_curve3.setData(x, ch3)
 
-        # EMG rests around a DC baseline, so a fixed 0..3 V range makes real
-        # changes look flat. Keep a small minimum span and follow the live data.
-        low = min(min(ch1), min(ch2), min(ch3))
-        high = max(max(ch1), max(ch2), max(ch3))
-        center = (low + high) / 2.0
-        span = max((high - low) * 1.25, EMG_MIN_SPAN)
-        self.emg_plot.setYRange(
-            max(0.0, center - span / 2.0),
-            min(3.1, center + span / 2.0),
+        latest_t = float(x[-1])
+        self.emg_plot.setXRange(
+            max(0.0, latest_t - self.PLOT_WINDOW_S),
+            max(self.PLOT_WINDOW_S, latest_t),
             padding=0,
         )
+
+        # Robust percentiles reject isolated serial spikes. The smoothed range
+        # avoids the distracting vertical jumping caused by per-frame autoscale.
+        combined = np.concatenate((ch1, ch2, ch3))
+        low, high = np.percentile(combined, (1.0, 99.0))
+        center = (low + high) / 2.0
+        span = max((high - low) * 1.45, EMG_MIN_SPAN)
+        target_low = max(0.0, center - span / 2.0)
+        target_high = min(3.1, center + span / 2.0)
+        if self._plot_y_range is None:
+            smooth_low, smooth_high = target_low, target_high
+        else:
+            old_low, old_high = self._plot_y_range
+            alpha = 0.18
+            smooth_low = old_low + alpha * (target_low - old_low)
+            smooth_high = old_high + alpha * (target_high - old_high)
+        self._plot_y_range = (smooth_low, smooth_high)
+        self.emg_plot.setYRange(smooth_low, smooth_high, padding=0)
 
     # ---------- Cleanup ----------
 
@@ -1308,10 +1470,11 @@ class RealTimeTestApp(QtWidgets.QWidget):
             # This also covers a partial failure inside handle_stop().
             with self._trial_lock:
                 self.collecting = False
-                self.t0_ns = None
                 self._close_trial_files()
 
             self._wait_for_mux_threads()
+            for trial_idx in list(self._pending_trial_names):
+                self._finalize_trial_files(trial_idx)
         finally:
             super().closeEvent(event)
 
@@ -1363,8 +1526,8 @@ def main():
         )
 
     app = QtWidgets.QApplication(sys.argv)
-    w = RealTimeTestApp(port='/dev/cu.usbmodem1203', baudrate=500000)
-    w.resize(700, 550)
+    w = RealTimeTestApp(port=SERIAL_PORT, baudrate=500000)
+    w.resize(1080, 900)
     w.show()
     sys.exit(app.exec_())
 
