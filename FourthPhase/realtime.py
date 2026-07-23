@@ -48,7 +48,7 @@ EMG_MIN_SPAN = 0.10                # show small EMG changes around the ADC basel
 # =========================
 # Serial config
 # =========================
-SERIAL_PORT = "COM5"               # serial port for EMG data (Windows)
+SERIAL_PORT = "COM4"               # serial port for EMG data (Windows)
 
 # =========================
 # Theme palettes (mirrors FirstPhase/theme.py)
@@ -269,7 +269,7 @@ class AudioCapture:
 # CameraCapture class
 # =========================
 class CameraCapture:
-    def __init__(self, cam_index=0, width=640, height=360, fps=30):
+    def __init__(self, cam_index=1, width=640, height=360, fps=30):
         self.cam_index = cam_index  # camera index
         self.width = width
         self.height = height
@@ -733,7 +733,7 @@ class RealTimeTestApp(QtWidgets.QWidget):
         self.serial.set_sample_callback(self.on_sample)
 
         # Camera
-        self.camera = CameraCapture(cam_index=0, width=640, height=360, fps=30)
+        self.camera = CameraCapture(cam_index=1, width=640, height=360, fps=30)
         self.cam_timer = QtCore.QTimer(self)
         self.cam_timer.timeout.connect(self.update_camera_frame)
 
