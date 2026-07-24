@@ -114,7 +114,7 @@ def find_trials_in_folder(folder):
     vid_nums = {extract_num_generic(p, ("video", "trial")): p for p in video_files}
     audio_nums = {extract_num_generic(p, ("audio",)): p for p in audio_files}
 
-    common = sorted(set(txt_nums) & set(vid_nums))
+    common = sorted(set(txt_nums) & set(vid_nums) & set(audio_nums))
     return [
         {
             "Data": None,
@@ -122,7 +122,7 @@ def find_trials_in_folder(folder):
             "folder": folder,
             "emg_path": txt_nums[n],
             "video_path": vid_nums[n],
-            "audio_path": audio_nums.get(n),
+            "audio_path": audio_nums[n],
         }
         for n in common
     ]
@@ -478,6 +478,8 @@ class EMGVideoViewer(QWidget):
         self.plot_widget.showGrid(x=True, y=True)
         self.plot_widget.setLabel('left', 'EMG (V)')
         self.plot_widget.setLabel('bottom', 'Time (s)')
+        self.plot_widget.setMouseEnabled(x=False, y=False)
+        self.plot_widget.setMenuEnabled(False)
         layout.addWidget(self.plot_widget)
 
         # Three curves for channels
@@ -1186,7 +1188,7 @@ def main():
     vid_nums = {extract_num_generic(p): p for p in video_files}
     audio_nums = {extract_num_generic(p): p for p in audio_files}
 
-    common_trials = sorted(set(txt_nums.keys()) & set(vid_nums.keys()))
+    common_trials = sorted(set(txt_nums.keys()) & set(vid_nums.keys()) & set(audio_nums.keys()))
     if not common_trials:
         print("No matching trial_X.txt and video_X.avi found.")
         return
@@ -1205,13 +1207,10 @@ def main():
 
     emg_path = txt_nums[n]
     video_path = vid_nums[n]
-    audio_path = audio_nums.get(n)
+    audio_path = audio_nums[n]
     print(f"Using EMG file:   {emg_path}")
     print(f"Using VIDEO file: {video_path}")
-    if audio_path:
-        print(f"Using AUDIO file: {audio_path}")
-    else:
-        print("No audio file found; continuing without audio overlay.")
+    print(f"Using AUDIO file: {audio_path}")
 
     # Load EMG data
     emg_times, emg_data, button_data = load_emg_file(emg_path)
