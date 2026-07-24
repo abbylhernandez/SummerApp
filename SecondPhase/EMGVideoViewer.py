@@ -19,7 +19,6 @@ from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import QTimer, Qt
 
 import pyqtgraph as pg
-
 # Optional audio playback (extract the video's embedded audio track and play it).
 try:
     import sounddevice as sd
@@ -82,7 +81,6 @@ class _AudioStreamPlayer:
                 pass
             self.stream = None
 
-
 # ----------------------------- EMG LOADING ----------------------------------
 
 def extract_num_generic(path, prefixes):
@@ -112,12 +110,11 @@ def find_trials_in_folder(folder):
         + glob.glob(os.path.join(folder, "audio*.wav"))
     )
 
-    # Extract all trial numbers from each file type
     txt_nums = {extract_num_generic(p, ("trial",)): p for p in txt_files}
     vid_nums = {extract_num_generic(p, ("video", "trial")): p for p in video_files}
     audio_nums = {extract_num_generic(p, ("audio",)): p for p in audio_files}
 
-    common = sorted(set(txt_nums) & set(vid_nums) & set(audio_nums))
+    common = sorted(set(txt_nums) & set(vid_nums))
     return [
         {
             "Data": None,
@@ -125,37 +122,23 @@ def find_trials_in_folder(folder):
             "folder": folder,
             "emg_path": txt_nums[n],
             "video_path": vid_nums[n],
-            "audio_path": audio_nums[n],
+            "audio_path": audio_nums.get(n),
         }
         for n in common
     ]
 
 
-def session_folder_timestamp(folder):
-    base = os.path.basename(folder)
-    timestamp_text = base[-22:]
-    try:
-        return datetime.strptime(timestamp_text, "%Y-%m-%d %I-%M-%S %p").timestamp()
-    except ValueError:
-        return os.path.getmtime(folder)
-
-
 def find_trials_under_root(root_folder):
     session_folders = sorted(
-        (
-            path
-            for path in glob.glob(os.path.join(root_folder, "*"))
-            if os.path.isdir(path)
-        ),
-        key=session_folder_timestamp,
-        reverse=True,
+        path
+        for path in glob.glob(os.path.join(root_folder, "*"))
+        if os.path.isdir(path)
     )
 
     trials = []
     for session_folder in session_folders:
         trials.extend(find_trials_in_folder(session_folder))
     return trials
-
 
 def compute_next_destination_for_root(result_root, num_acts=2):
     """
@@ -175,8 +158,6 @@ def compute_next_destination_for_root(result_root, num_acts=2):
     act_idx = (total_clips % num_acts) + 1
     trial_idx = (total_clips // num_acts) + 1
     return act_idx, trial_idx
-
-
 def select_startup_trial_index(trials, num_acts=2):
     """
     Pick the raw trial whose number matches the next ResultClip destination.
@@ -196,8 +177,6 @@ def select_startup_trial_index(trials, num_acts=2):
                 return index
 
     return 0
-
-
 def _unwrap_monotonic_ns(raw_ns):
     """Unwrap signed 32-bit wraps into a monotonic int64 timeline."""
     if not raw_ns:
@@ -468,8 +447,7 @@ class EMGVideoViewer(QWidget):
 
         self.frame_idx = 0
         self.is_paused = False
-
-        # Audio track (extracted from the video) for synced playback.
+           # Audio track (extracted from the video) for synced playback.
         self.audio_samples = None
         self.audio_rate = None
         self.audio_player = None
@@ -483,7 +461,7 @@ class EMGVideoViewer(QWidget):
         self.region = None
         self.button_regions = []
         if len(self.emg_times) > 1:
-            self.dt_mean = float(np.mean(np.diff(self.emg_times))) #average time difference between samples
+            self.dt_mean = float(np.mean(np.diff(self.emg_times)))
         else:
             self.dt_mean = 0.0
 
@@ -511,7 +489,7 @@ class EMGVideoViewer(QWidget):
         # Match video & EMG durations roughly
         self.plot_widget.setXRange(0, self.emg_times[-1], padding=0)
         self._set_audio_y_range()
-        #self._build_button_regions()
+        self._build_button_regions()
 
         # ---- Clip controls (samples window) ----
         clip_layout = QHBoxLayout()
@@ -549,14 +527,11 @@ class EMGVideoViewer(QWidget):
         layout.addWidget(self.btn_load_other)
         self.btn_load_other.clicked.connect(self.load_other_trial)
 
-        # Timer for video/plot updates. The tick is intentionally faster than
-        # the frame interval: each tick we compute where we *should* be from the
-        # playback clock (the audio position at 1x) and skip forward to the
-        # matching frame, so audio and video stay in sync.
+        # Timer for video/plot updates
         self.timer = QTimer(self)
         self.interval_ms = self._playback_interval_ms()
         self.timer.timeout.connect(self._update_frame)
-        self._begin_playback()
+        self.timer.start(self.interval_ms)
 
     # ------------------------------------------------------------------
     # Helpers: clip destinations (act1/act2, trial index)
@@ -570,8 +545,7 @@ class EMGVideoViewer(QWidget):
 
     def _playback_interval_ms(self):
         return max(1, int(round(1000 / (self.fps * self.PLAYBACK_SPEED))))
-
-    # ------------------------------------------------------------------
+   # ------------------------------------------------------------------
     # Audio playback (extracted from the video's embedded track)
 
     def _extract_audio(self):
@@ -646,6 +620,18 @@ class EMGVideoViewer(QWidget):
         # Uncomment this line to show the audio signal over the EMG graph.
         # self.audio_view.addItem(self.curve_audio)
 
+    def _setup_audio_overlay(self):
+        self.audio_view = pg.ViewBox()
+        self.plot_widget.showAxis("right")
+        self.plot_widget.scene().addItem(self.audio_view)
+        self.plot_widget.getAxis("right").linkToView(self.audio_view)
+        self.plot_widget.getAxis("right").setLabel("Audio amp")
+        self.audio_view.setXLink(self.plot_widget)
+
+        audio_pen = pg.mkPen((255, 220, 0), width=2)
+        self.curve_audio = pg.PlotCurveItem(pen=audio_pen, name="audio")
+        self.audio_view.addItem(self.curve_audio)
+
         self.plot_widget.getViewBox().sigResized.connect(self._sync_audio_view)
         self._sync_audio_view()
 
@@ -684,45 +670,63 @@ class EMGVideoViewer(QWidget):
                 pass
         self.button_regions = []
 
-    # def _build_button_regions(self):
-    #     self._clear_button_regions()
-    #     if len(self.emg_times) == 0 or len(self.button_data) == 0:
-    #         return
+    def _build_button_regions(self):
+        self._clear_button_regions()
+        if len(self.emg_times) == 0 or len(self.button_data) == 0:
+            return
 
-    #     n = min(len(self.emg_times), len(self.button_data))
-    #     times = self.emg_times[:n]
-    #     button = np.asarray(self.button_data[:n], dtype=np.int8)
+        n = min(len(self.emg_times), len(self.button_data))
+        times = self.emg_times[:n]
+        button = np.asarray(self.button_data[:n], dtype=np.int8)
 
-    #     min_width = self.dt_mean if self.dt_mean > 0 else 0.01
-    #     i = 0
-    #     while i < n:
-    #         if button[i] != 1:
-    #             i += 1
-    #             continue
+        min_width = self.dt_mean if self.dt_mean > 0 else 0.01
+        i = 0
+        while i < n:
+            if button[i] != 1:
+                i += 1
+                continue
 
-    #         start_i = i
-    #         while i + 1 < n and button[i + 1] == 1:
-    #             i += 1
-    #         end_i = i
+            start_i = i
+            while i + 1 < n and button[i + 1] == 1:
+                i += 1
+            end_i = i
 
-    #         t0 = float(times[start_i])
-    #         t1 = float(times[end_i]) + min_width
-    #         if t1 <= t0:
-    #             t1 = t0 + min_width
+            t0 = float(times[start_i])
+            t1 = float(times[end_i]) + min_width
+            if t1 <= t0:
+                t1 = t0 + min_width
 
-    #         reg = pg.LinearRegionItem(
-    #             values=(t0, t1),
-    #             movable=False,
-    #             brush=(255, 0, 0, 35),
-    #             pen=(255, 0, 0, 110),
-    #         )
-    #         reg.setZValue(-20)
-    #         self.plot_widget.addItem(reg)
-    #         self.button_regions.append(reg)
-    #         i += 1
+            reg = pg.LinearRegionItem(
+                values=(t0, t1),
+                movable=False,
+                brush=(255, 0, 0, 35),
+                pen=(255, 0, 0, 110),
+            )
+            reg.setZValue(-20)
+            self.plot_widget.addItem(reg)
+            self.button_regions.append(reg)
+            i += 1
 
     def _compute_next_destination_for_root(self, result_root):
-        return compute_next_destination_for_root(result_root, self.num_acts)
+        """
+        Same logic as before, but parameterized by result_root.
+        Count how many trial_*.txt exist under result_root/act1, act2, ...
+        Then alternate: act1/trial1, act2/trial1, act1/trial2, ...
+        """
+        num_acts = self.num_acts
+        total_clips = 0
+
+        if os.path.isdir(result_root):
+            for act_idx in range(1, num_acts + 1):
+                act_dir = os.path.join(result_root, f"act{act_idx}")
+                if not os.path.isdir(act_dir):
+                    continue
+                existing_txt = glob.glob(os.path.join(act_dir, "trial_*.txt"))
+                total_clips += len(existing_txt)
+
+        act_idx = (total_clips % num_acts) + 1
+        trial_idx = (total_clips // num_acts) + 1
+        return act_idx, trial_idx
 
     def _compute_next_destination(self):
         """
@@ -834,9 +838,7 @@ class EMGVideoViewer(QWidget):
         self._stop_audio()
         self.is_paused = True
         self.btn_play_pause.setText("Play")
-
         self.load_audio = True
-
         n = selected_trial["trial_num"]
         new_emg_path = selected_trial["emg_path"]
         new_video_path = selected_trial["video_path"]
@@ -873,7 +875,7 @@ class EMGVideoViewer(QWidget):
 
         self.plot_widget.setXRange(0, self.emg_times[-1], padding=0)
         self._set_audio_y_range()
-        #self._build_button_regions()
+        self._build_button_regions()
 
         if self.cap is not None:
             self.cap.release()
@@ -888,13 +890,13 @@ class EMGVideoViewer(QWidget):
         if self.fps <= 0:
             self.fps = 30.0
 
-        # Pull the new video's embedded audio track for synced playback.
         self._extract_audio()
-
         self.interval_ms = self._playback_interval_ms()
         self.frame_idx = 0
 
-        self._begin_playback()
+        self.is_paused = False
+        self.btn_play_pause.setText("Pause")
+        self.timer.start(self.interval_ms)
 
         if self.clip_samples is not None:
             self.samples_input.setText(str(self.clip_samples))
@@ -937,7 +939,9 @@ class EMGVideoViewer(QWidget):
         common = sorted(trials_by_num)
         if not common:
             print("No more trials found.")
-            self._begin_playback()
+            self.timer.start(self.interval_ms)
+            self.is_paused = False
+            self.btn_play_pause.setText("Pause")
             return
 
         n, ok = QInputDialog.getInt(
@@ -950,7 +954,9 @@ class EMGVideoViewer(QWidget):
         )
 
         if not ok or n not in common:
-            self._begin_playback()
+            self.timer.start(self.interval_ms)
+            self.is_paused = False
+            self.btn_play_pause.setText("Pause")
             return
 
         self._load_trial(trials_by_num[n])
@@ -1077,17 +1083,15 @@ class EMGVideoViewer(QWidget):
     # --------------- Playback controls -----------------
     def toggle_play_pause(self):
         if self.is_paused:
-            # Resume from the current frame, restarting the clock + audio.
-            self._begin_playback()
+            self.timer.start(self.interval_ms)
+            self.is_paused = False
+            self.btn_play_pause.setText("Pause")
         else:
             self.timer.stop()
-            self._stop_audio()
             self.is_paused = True
             self.btn_play_pause.setText("Play")
 
     def replay(self):
-        self.timer.stop()
-        self._stop_audio()
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         self.frame_idx = 0
 
@@ -1096,40 +1100,23 @@ class EMGVideoViewer(QWidget):
         self.curve_ch3.clear()
         self.curve_audio.clear()
 
-        self._begin_playback()
+        if self.is_paused:
+            self.is_paused = False
+            self.btn_play_pause.setText("Pause")
+        self.timer.start(self.interval_ms)
 
     # --------------- Frame update ----------------------
     def _update_frame(self):
-        # Where we should be on the timeline right now. At 1x follow the real
-        # audio position so audio and video stay locked together; otherwise use
-        # a wall clock scaled by the playback speed.
-        if self.audio_master and self.audio_player is not None and self.audio_player.active():
-            target_t = self.audio_player.position_s()
-        else:
-            elapsed = time.perf_counter() - self._play_t0
-            target_t = self._play_t_origin + elapsed * self.PLAYBACK_SPEED
-
-        target_frame = max(0, int(round(target_t * self.fps)))
-
-        # Read forward to the target frame; dropping intermediate frames keeps
-        # timing correct even if decode/draw falls behind.
-        frame = None
-        while self.frame_idx <= target_frame:
-            ret, f = self.cap.read()
-            if not ret:
-                self.timer.stop()
-                self._stop_audio()
-                self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                self.frame_idx = 0
-                self.is_paused = True
-                self.btn_play_pause.setText("Play")
-                return
-            frame = f
-            self.frame_idx += 1
-
-        if frame is None:
+        ret, frame = self.cap.read()
+        if not ret:
+            self.timer.stop()
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            self.frame_idx = 0
+            self.is_paused = True
+            self.btn_play_pause.setText("Play")
             return
 
+        self.frame_idx += 1
         current_time_sec = self.frame_idx / self.fps
 
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -1157,76 +1144,81 @@ class EMGVideoViewer(QWidget):
                 self.audio_data[:audio_idx],
             )
 
-    # --------------- Cleanup ---------------------------
-    def closeEvent(self, event):
-        self.timer.stop()
-        self._stop_audio()
-        if self.cap is not None:
-            self.cap.release()
-        super().closeEvent(event)
-
 
 # ----------------------------- MAIN SCRIPT ----------------------------------
 
 def main():
-    trial_logs_root = os.path.join("FirstPhase", "trial_logs")
-    if not os.path.isdir(trial_logs_root):
-        print(f"Folder does not exist: {trial_logs_root}")
+    # Ask for folder path
+    folder = input("Enter path to folder (e.g. ...\\finalemg\\set1\\act1): ").strip()
+
+    if not folder:
+        print("No folder given.")
+        return
+    if not os.path.isdir(folder):
+        print("Folder does not exist.")
         return
 
-    trials = find_trials_under_root(trial_logs_root)
-    if not trials:
-        print(f"No matching trial/video/audio files found under {trial_logs_root}")
+    txt_files = glob.glob(os.path.join(folder, "trial*.txt"))
+
+    # accept both "video_*.avi"/"video*.avi" and "trial_*.avi"/"trial*.avi"
+    video_files = glob.glob(os.path.join(folder, "video*.avi")) \
+                  + glob.glob(os.path.join(folder, "trial*.avi"))
+
+    # accept both "audio_*.csv"/"audio*.csv" and "audio_*.wav"/"audio*.wav"
+    audio_files = glob.glob(os.path.join(folder, "audio*.csv")) \
+                  + glob.glob(os.path.join(folder, "audio*.wav"))
+
+    def extract_num_generic(path):
+        base = os.path.basename(path)
+        name, _ = os.path.splitext(base)
+
+        for prefix in ("trial_", "trial", "video_", "video", "audio_", "audio"):
+            if name.startswith(prefix):
+                suffix = name[len(prefix):]
+                if suffix.startswith("_"):
+                    suffix = suffix[1:]
+                if suffix.isdigit():
+                    return int(suffix)
+
+        raise ValueError(f"Unexpected filename format: {base}")
+
+    txt_nums = {extract_num_generic(p): p for p in txt_files}
+    vid_nums = {extract_num_generic(p): p for p in video_files}
+    audio_nums = {extract_num_generic(p): p for p in audio_files}
+
+    common_trials = sorted(set(txt_nums.keys()) & set(vid_nums.keys()))
+    if not common_trials:
+        print("No matching trial_X.txt and video_X.avi found.")
         return
 
-    # print("Available trials:")
-    # for index, trial in enumerate(trials, start=1):
-    #     folder_name = os.path.basename(trial["folder"])
-    #     print(f"{index}. {folder_name} - trial {trial['trial_num']}")
+    print("Available trials:", common_trials)
+    while True:
+        try:
+            n = int(input("Which trial number do you want to view? "))
+        except ValueError:
+            print("Please enter a valid integer.")
+            continue
+        if n not in common_trials:
+            print("That trial does not exist. Choose one of:", common_trials)
+        else:
+            break
 
-    # try:
-    #     choice_text = input("Choose a trial to view [1]: ").strip()
-    # except EOFError:
-    #     choice_text = ""
-
-    # if choice_text:
-    #     try:
-    #         choice = int(choice_text)
-    #     except ValueError:
-    #         print("Please enter a valid number.")
-    #         return
-    # else:
-    #     choice = 1
-
-    # if choice < 1 or choice > len(trials):
-    #     print(f"Choose a number between 1 and {len(trials)}.")
-    #     return
-
-    selected_trial_index = select_startup_trial_index(trials)
-    selected_trial = trials[selected_trial_index]
-    n = selected_trial["trial_num"]
-    emg_path = selected_trial["emg_path"]
-    video_path = selected_trial["video_path"]
-    audio_path = selected_trial["audio_path"]
+    emg_path = txt_nums[n]
+    video_path = vid_nums[n]
+    audio_path = audio_nums.get(n)
     print(f"Using EMG file:   {emg_path}")
     print(f"Using VIDEO file: {video_path}")
-    print(f"Using AUDIO file: {audio_path}")
+    if audio_path:
+        print(f"Using AUDIO file: {audio_path}")
+    else:
+        print("No audio file found; continuing without audio overlay.")
 
     # Load EMG data
     emg_times, emg_data, button_data = load_emg_file(emg_path)
 
     # Run Qt app
     app = QApplication(sys.argv)
-    viewer = EMGVideoViewer(
-        video_path,
-        emg_times,
-        emg_data,
-        button_data,
-        emg_path,
-        audio_path,
-        available_trials=trials,
-        current_trial_index=selected_trial_index,
-    )
+    viewer = EMGVideoViewer(video_path, emg_times, emg_data, button_data, emg_path)
     viewer.setWindowTitle(f"Trial {n} - EMG + Video")
     viewer.resize(900, 750)
     viewer.show()
