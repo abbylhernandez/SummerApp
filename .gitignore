@@ -1,12 +1,27 @@
 .venv/
 .vscode/settings.json
-CleanData/
 
 # ==========================================
-# DATA FILES (Ignore large data files)
+# GENERATED RECORDING / DATA FOLDERS
 # ==========================================
+trial_logs/
+Jaylan_Thurs_Trial/
+realtimetest/
+realtimetest_logs/
+CleanData/
 prune*
 LDA_BASE_size*
+
+# ==========================================
+# AUDIO FILES
+# ==========================================
+*.wav
+*.mp3
+*.flac
+*.aac
+*.m4a
+*.ogg
+*.wma
 
 # ==========================================
 # VIDEO FILES (Ignore all video recordings)
@@ -19,13 +34,36 @@ LDA_BASE_size*
 *.webm
 *.mpg
 *.mpeg
-
+*.m4v
+*.flv
+*.3gp
 
 # ==========================================
-# TEXT FILES (Ignore raw EMG data logs)
+# EMG / SCIENTIFIC DATA FILES
 # ==========================================
 *.txt
 *.csv
+*.npy
+*.npz
+*.mat
+*.h5
+*.hdf5
+*.edf
+*.tdms
+*.dat
+
+# ==========================================
+# IMAGE FILES
+# ==========================================
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.gif
+*.tif
+*.tiff
+*.webp
+*.heic
 
 # ==========================================
 # PYTHON CACHE

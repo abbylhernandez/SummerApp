@@ -34,6 +34,19 @@ else:
     _imageio_ffmpeg_import_error = None
 
 
+# Keep generated recordings and logs beside this script, regardless of the
+# directory from which the application is launched.
+FOURTH_PHASE_DIR = Path(__file__).resolve().parent
+REALTIME_TEST_DIR = FOURTH_PHASE_DIR / "realtimetest"
+REALTIME_LOG_DIR = FOURTH_PHASE_DIR / "realtimetest_logs"
+
+
+def ensure_output_directories():
+    """Create the FourthPhase recording and log directories."""
+    REALTIME_TEST_DIR.mkdir(parents=True, exist_ok=True)
+    REALTIME_LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+
 # =========================
 # Audio config
 # =========================
@@ -766,8 +779,8 @@ class RealTimeTestApp(QtWidgets.QWidget):
 
         # ---------- NEW SAVING STRUCTURE ----------
         # Root folder
-        self.base_dir = Path("realtimetest")
-        self.base_dir.mkdir(exist_ok=True)
+        self.base_dir = REALTIME_TEST_DIR
+        self.base_dir.mkdir(parents=True, exist_ok=True)
 
         # Create one named session folder when the app opens.
         default_session = datetime.now().strftime("SESSION_%Y%m%d_%H%M%S")
@@ -1480,8 +1493,9 @@ class RealTimeTestApp(QtWidgets.QWidget):
 
 
 def main():
-    from pathlib import Path
     import sys
+
+    ensure_output_directories()
 
     # VS Code's Code Runner may expose a Windows CP-1252 stdout stream.  Several
     # log messages contain emoji, so configure the stream before logging creates
@@ -1498,8 +1512,7 @@ def main():
                     pass
 
     # Where to save the log file
-    log_dir = Path("realtimetest_logs")
-    log_dir.mkdir(exist_ok=True)
+    log_dir = REALTIME_LOG_DIR
     log_file = log_dir / "realtimetest.log"   # or use a timestamped name if you want
 
     # Configure logging to both file and console
