@@ -23,10 +23,17 @@ import pyqtgraph as pg
 # Optional audio playback (extract the video's embedded audio track and play it).
 try:
     import sounddevice as sd
-    import imageio_ffmpeg
-    AUDIO_OK = True
+    SOUNDDEVICE_OK = True
 except Exception:
-    AUDIO_OK = False
+    SOUNDDEVICE_OK = False
+
+try:
+    import imageio_ffmpeg
+    FFMPEG_OK = True
+except Exception:
+    FFMPEG_OK = False
+
+AUDIO_OK = SOUNDDEVICE_OK and FFMPEG_OK
 
 
 class _AudioStreamPlayer:
@@ -419,6 +426,33 @@ def format_time_from_seconds(s):
     return f"{h:02d}:{m:02d}:{sec:02d}.{ms:03d}"
 
 
+def resample_emg_clip(times, emg, target_samples):
+    """Interpolate only the EMG channels onto ``target_samples`` timestamps."""
+    times = np.asarray(times, dtype=float)
+    emg = np.asarray(emg, dtype=float)
+    target_samples = int(target_samples)
+
+    if target_samples < 1:
+        raise ValueError("target_samples must be at least 1")
+    if len(times) == 0 or len(times) != len(emg):
+        raise ValueError("EMG timestamps and samples must be non-empty and aligned")
+    if target_samples == len(times):
+        return times.copy(), emg.copy()
+
+    if len(times) == 1 or times[-1] <= times[0]:
+        return (
+            np.full(target_samples, times[0], dtype=float),
+            np.repeat(emg[:1], target_samples, axis=0),
+        )
+
+    resampled_times = np.linspace(times[0], times[-1], target_samples)
+    resampled_emg = np.column_stack([
+        np.interp(resampled_times, times, emg[:, channel])
+        for channel in range(emg.shape[1])
+    ])
+    return resampled_times, resampled_emg
+
+
 # ----------------------------- VIEWER CLASS ---------------------------------
 
 class EMGVideoViewer(QWidget):
@@ -739,12 +773,9 @@ class EMGVideoViewer(QWidget):
             f"Next clip will be saved to: act{act_idx} / trial_{trial_idx}"
         )
 
-    # ------------------ Core save helper (EMG + video) ------------------
-    def _save_clip_to_root(self, root_name, idx):
-        """
-        Save EMG + video for the given indices `idx` into a root folder
-        (e.g. 'ResultClip', 'ResultClipSizeUp700', ...).
-        """
+    # ------------------------ EMG save helper ----------------------------
+    def _save_clip_to_root(self, root_name, idx, target_emg_samples=None):
+        """Save an EMG clip or resampled EMG variant without copying A/V."""
         if len(idx) == 0:
             print(f"[{root_name}] No samples to save.")
             return
@@ -752,25 +783,23 @@ class EMGVideoViewer(QWidget):
         base_dir = os.path.dirname(self.emg_path)
         result_root = os.path.join(base_dir, root_name)
 
-        # absolute times for these samples
         times_clip_abs = self.emg_times[idx].copy()
         emg_clip = self.emg_data[idx, :].copy()
+        if target_emg_samples is not None:
+            times_clip_abs, emg_clip = resample_emg_clip(
+                times_clip_abs,
+                emg_clip,
+                target_emg_samples,
+            )
 
-        t_clip_start = float(times_clip_abs[0])
-        t_clip_end = float(times_clip_abs[-1])
-
-        # re-zero for writing timestamps
         times_clip = times_clip_abs - times_clip_abs[0]
 
-        # Decide act/trial index for THIS root
         act_idx, trial_idx = self._compute_next_destination_for_root(result_root)
         act_dir = os.path.join(result_root, f"act{act_idx}")
         os.makedirs(act_dir, exist_ok=True)
 
         emg_out_path = os.path.join(act_dir, f"trial_{trial_idx}.txt")
-        video_out_path = os.path.join(act_dir, f"video_{trial_idx}.avi")
 
-        # ---------- Save EMG TXT ----------
         with open(emg_out_path, "w") as f:
             f.write("timestamp\tch1\tch2\tch3\n")
             for t_sec, (c1, c2, c3) in zip(times_clip, emg_clip):
@@ -782,49 +811,10 @@ class EMGVideoViewer(QWidget):
             f"{emg_out_path}"
         )
 
-        # ---------- Save VIDEO CLIP ----------
-        cap_clip = cv2.VideoCapture(self.video_path)
-        if not cap_clip.isOpened():
-            print(f"[{root_name}] Could not open video again for clipping.")
-            return
-
-        fps = cap_clip.get(cv2.CAP_PROP_FPS)
-        if fps <= 0:
-            fps = self.fps
-
-        width = int(cap_clip.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap_clip.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        frame_count = int(cap_clip.get(cv2.CAP_PROP_FRAME_COUNT))
-
-        start_frame = int(round(t_clip_start * fps))
-        end_frame = int(round(t_clip_end * fps))
-
-        start_frame = max(0, min(start_frame, frame_count - 1))
-        end_frame = max(start_frame, min(end_frame, frame_count - 1))
-
-        fourcc = cv2.VideoWriter_fourcc(*"XVID")
-        writer = cv2.VideoWriter(video_out_path, fourcc, fps, (width, height))
-
-        cap_clip.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-        for frame_idx in range(start_frame, end_frame + 1):
-            ret, frame = cap_clip.read()
-            if not ret:
-                break
-            writer.write(frame)
-
-        writer.release()
-        cap_clip.release()
-
-        print(
-            f"[{root_name}] Saved VIDEO clip frames {start_frame}–{end_frame} to: "
-            f"{video_out_path}"
-        )
-
         return {
             "act_idx": act_idx,
             "trial_idx": trial_idx,
             "emg_out_path": emg_out_path,
-            "video_out_path": video_out_path,
         }
 
     # --------------- Clip window logic -----------------
@@ -995,12 +985,11 @@ class EMGVideoViewer(QWidget):
 
     def save_clip_segment(self):
         """
-        Save EMG samples inside the current window AND matching video clip.
+        Save EMG samples inside the current window without copying video/audio.
 
         - Base behavior: saves to ResultClip/actX/trial_Y.*  (unchanged)
-        - NEW: if clip_samples == 500, also creates multiple centered clips
-            with different lengths and saves them to
-            ResultClipSizeUp{N}/actX/trial_Y.*
+        - If clip_samples == 500, resamples only that EMG window to several
+          sample counts. Original video/audio remain in the session folder.
         """
         if self.region is None:
             print("No clip window defined.")
@@ -1029,42 +1018,20 @@ class EMGVideoViewer(QWidget):
         # ------------ Save base clip exactly as before ------------
         base_save = self._save_clip_to_root("ResultClip", idx)
 
-        # ------------ NEW: multiple sizes centered on same region ------------
+        # ---------------- Resample only EMG to each size ----------------------
         if self.clip_samples == 500:
-            # target sizes in *samples* (200 -> 1000)
             sizes = [
                 200, 250, 300, 350, 400,
                 450, 500, 550, 600, 650,
                 700, 750, 800, 900, 1000
             ]
-
-            # center index in original EMG array (absolute index)
-            base_start = idx[0]
-            base_end = idx[-1] + 1
-            base_center = (base_start + base_end) // 2
-
-            total_samples = len(self.emg_times)
-
             for n in sizes:
-                half = n // 2
-                start_n = base_center - half
-                end_n = start_n + n
-
-                # clamp to available sample range
-                if start_n < 0:
-                    start_n = 0
-                    end_n = min(n, total_samples)
-                if end_n > total_samples:
-                    end_n = total_samples
-                    start_n = max(0, end_n - n)
-
-                if start_n >= end_n:
-                    print(f"[ResultClipSizeUp{n}] window out of bounds, skipping.")
-                    continue
-
-                idx_n = np.arange(start_n, end_n)
                 root_name = f"ResultClipSizeUp{n}"
-                self._save_clip_to_root(root_name, idx_n)
+                self._save_clip_to_root(
+                    root_name,
+                    idx,
+                    target_emg_samples=n,
+                )
 
         if base_save and base_save["act_idx"] == self.num_acts:
             loaded_next = self.load_next_trial()
