@@ -8,13 +8,13 @@ SIMULATE        = False
 SIM_RATE_HZ     = 1000              # fake sample rate while simulating
 SIM_LEVELS      = (0.5, 1.5, 2.5)   # straight-line value (V) for ch1, ch2, ch3
 
-#SERIAL_PORT     = "COM3"            # USB serial port of the EMG microcontroller
-SERIAL_PORT = "/dev/cu.usbmodem103"   # USB serial port for Apple Macbook (ls /dev/cu.*)
+SERIAL_PORT     = "COM3"            # USB serial port of the EMG microcontroller
+#SERIAL_PORT = "/dev/cu.usbmodem21403"   # USB serial port for Apple Macbook (ls /dev/cu.*)
 BAUD_RATE       = 500000
 START_CMD       = b"z"              # 'z' = stream raw ADC (3 ch); 'c' adds prediction RX
 STOP_CMD        = b"v"              # byte sent to MCU to stop streaming
 
-CAM_INDEX       = 0                # 1 = Logi C270 USB cam (0 = laptop built-in); None = auto
+CAM_INDEX       = 1                # 1 = Logi C270 USB cam (0 = laptop built-in); None = auto
 CAM_PROBE_MAX   = 4                 # how many indices to probe when auto-detecting
 CAM_WIDTH       = 640
 CAM_HEIGHT      = 360
