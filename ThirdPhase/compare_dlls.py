@@ -13,7 +13,7 @@ import ctypes
 import array
 from pathlib import Path
 
-import WeAreGoingHome as W
+import ThirdPhase.TrainClass as W
 
 
 def configure_signatures(obj):

@@ -1,6 +1,5 @@
 .venv/
 .vscode/settings.json
-CleanData/
 
 # ==========================================
 # DATA FILES (Ignore large data files)

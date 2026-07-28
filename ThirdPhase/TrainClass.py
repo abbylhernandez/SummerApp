@@ -1656,7 +1656,7 @@ class trainclass:
 
 if __name__ == "__main__":
     train_obj = trainclass()
-    root_tabledata = r"/Users/abbyhernandez/Desktop/NEES/SummerApp/FirstPhase/trial_logs/ObjectData-2026-07-02 10-30-22 AM"
+    root_tabledata = r"/Users/abbyhernandez/Desktop/NEES/SummerApp/FirstPhase/trial_logs/validation1Data_copy"
 
     for prune in range(1, 15):  # 1..14
         print(f"\n\n=== Running prune_trials={prune} ===\n")

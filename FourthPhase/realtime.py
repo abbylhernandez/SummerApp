@@ -49,6 +49,7 @@ EMG_MIN_SPAN = 0.10                # show small EMG changes around the ADC basel
 # Serial config
 # =========================
 SERIAL_PORT = "COM5"               # serial port for EMG data (Windows)
+#SERIAL_PORT = "/dev/ttyUSB0"       # serial port for EMG data (Linux/Mac)
 
 # =========================
 # Theme palettes (mirrors FirstPhase/theme.py)
