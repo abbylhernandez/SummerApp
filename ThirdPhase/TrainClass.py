@@ -1874,7 +1874,7 @@ class trainclass:
 
 if __name__ == "__main__":
     train_obj = trainclass()
-    root_tabledata = r"/Users/abbyhernandez/Desktop/NEES/SummerApp/FirstPhase/trial_logs/validation1Data_copy"
+    root_tabledata = r"C:\Users\milto\OneDrive\Desktop\Star Program\ResearchCode\SummerApp\FirstPhase\trial_logs\Subject3Data-2026-07-23 02-30-21 PM"
 
     for prune in range(1, 15):  # 1..14
         print(f"\n\n=== Running prune_trials={prune} ===\n")
