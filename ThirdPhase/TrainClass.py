@@ -25,6 +25,16 @@ class trainclass:
         self.testing_folder = None
         self.train_folder = None
         self.last_train_accuracy = None
+        self.last_train_accuracy_by_class = {}
+        self.last_test_accuracy_by_class = {}
+
+        # Dataset folders use act1/act2. These names are used only in the
+        # additional per-action report and graph; change them here if the
+        # recording order is reversed.
+        self.class_display_names = {
+            "act1": "Hold",
+            "act2": "Release",
+        }
 
         # === Classifier and Signal Parameters ===
         self.num_class = 2
@@ -912,6 +922,49 @@ class trainclass:
         )
         acc_percent = float(accuracy) * 100.0
         self.last_train_accuracy = acc_percent
+
+        # Keep per-class training results available for a separate report.
+        # featurematrix has already been normalized in place at this point.
+        class_names = [d.name for d in act_dirs]
+        correct_by_class = [0] * self.num_class
+        total_by_class = [0] * self.num_class
+
+        for row_idx in range(feat_idx):
+            expected = int(self.trainclass[row_idx])
+            if expected < 1 or expected > self.num_class:
+                continue
+
+            best_class = 1
+            best_score = None
+            row_offset = row_idx * self.feature_dim
+            for class_zero_idx in range(self.num_class):
+                score = float(self.Cg[class_zero_idx])
+                for feature_idx in range(self.feature_dim):
+                    weight_idx = class_zero_idx + feature_idx * self.num_class
+                    score += (
+                        float(self.Wg[weight_idx])
+                        * float(self.featurematrix[row_offset + feature_idx])
+                    )
+                if best_score is None or score > best_score:
+                    best_score = score
+                    best_class = class_zero_idx + 1
+
+            class_zero_idx = expected - 1
+            total_by_class[class_zero_idx] += 1
+            if best_class == expected:
+                correct_by_class[class_zero_idx] += 1
+
+        self.last_train_accuracy_by_class = {}
+        for class_zero_idx, class_name in enumerate(class_names):
+            total = total_by_class[class_zero_idx]
+            correct = correct_by_class[class_zero_idx]
+            class_accuracy = (correct / total * 100.0) if total else 0.0
+            self.last_train_accuracy_by_class[class_name] = {
+                "accuracy": class_accuracy,
+                "correct": correct,
+                "total": total,
+            }
+
         logger.info("Training accuracy = %.2f%%", acc_percent)
         self.add_report(f"Training accuracy = {acc_percent:.2f}%")
         self.add_report("")
@@ -1066,6 +1119,8 @@ class trainclass:
 
         total_win_num = 0
         num_correct = 0
+        correct_by_class = {}
+        total_by_class = {}
 
         self.add_report("********************************************************")
         self.add_report("*******        Testing Session Starts        ***********")
@@ -1084,6 +1139,8 @@ class trainclass:
 
         for class_idx, act_dir in enumerate(act_dirs):
             act_name = act_dir.name
+            correct_by_class[act_name] = 0
+            total_by_class[act_name] = 0
             trial_files = sorted(act_dir.glob("trial_*.txt"))
             if not trial_files:
                 logger.warning("No trial_*.txt files found in %s", act_dir)
@@ -1133,8 +1190,10 @@ class trainclass:
 
                     if int(decision) == (class_idx + 1):
                         num_correct += 1
+                        correct_by_class[act_name] += 1
 
                     total_win_num += 1
+                    total_by_class[act_name] += 1
                     wins_this_trial += 1
                     m += 1
 
@@ -1150,6 +1209,19 @@ class trainclass:
             test_accuracy = float(num_correct) / float(total_win_num)
         else:
             test_accuracy = 0.0
+
+        self.last_test_accuracy_by_class = {}
+        for act_name in total_by_class:
+            class_total = total_by_class[act_name]
+            class_correct = correct_by_class[act_name]
+            class_accuracy = (
+                class_correct / class_total * 100.0 if class_total else 0.0
+            )
+            self.last_test_accuracy_by_class[act_name] = {
+                "accuracy": class_accuracy,
+                "correct": class_correct,
+                "total": class_total,
+            }
 
         self.add_report("=== Testing Summary ===")
         self.add_report(f"Total test windows: {total_win_num}")
@@ -1372,6 +1444,7 @@ class trainclass:
         base_test_accs = []    # original test
         pruned_train_accs = [] # pruned train
         pruned_test_accs = []  # pruned test
+        per_action_results = []
 
         # ---------- set up prune root + report path ----------
         prune_root = root / f"prune_{prune_trials}"
@@ -1384,8 +1457,18 @@ class trainclass:
         if acc_report_path.exists():
             acc_report_path.unlink()
 
+        per_action_report_path = (
+            prune_root / f"{Path(accuracy_report_name).stem}_PerAction.txt"
+        )
+        if per_action_report_path.exists():
+            per_action_report_path.unlink()
+
         def wr(line=""):
             with acc_report_path.open("a", encoding="utf-8") as f:
+                f.write(str(line) + "\n")
+
+        def wr_action(line=""):
+            with per_action_report_path.open("a", encoding="utf-8") as f:
                 f.write(str(line) + "\n")
 
         wr("============================================================")
@@ -1397,6 +1480,19 @@ class trainclass:
         wr("============================================================")
         wr("SampleSize\tBaseTrain(%)\tBaseTest(%)\tPrunedTrain(%)\tPrunedTest(%)")
         wr("")
+
+        wr_action("============================================================")
+        wr_action(
+            f"PER-ACTION ACCURACY  (Train {percentage}% / Test {100-percentage}%)"
+        )
+        wr_action("act1 is displayed as Hold; act2 is displayed as Release.")
+        wr_action("Accuracy is measured across windows belonging only to that action.")
+        wr_action("============================================================")
+        wr_action(
+            "SampleSize\tAction\tBaseTrain(%)\tBaseTest(%)"
+            "\tPrunedTrain(%)\tPrunedTest(%)"
+        )
+        wr_action("")
 
         # ==========================================================
         # LOOP OVER EACH SAMPLE-SIZE DATASET (<= max_sample_size)
@@ -1418,6 +1514,14 @@ class trainclass:
             self.set_data_info()
             self.train_model()
             base_test = self.test_model()
+            base_train_by_action = {
+                name: dict(result)
+                for name, result in self.last_train_accuracy_by_class.items()
+            }
+            base_test_by_action = {
+                name: dict(result)
+                for name, result in self.last_test_accuracy_by_class.items()
+            }
 
             base_test_pct = base_test * 100.0
             base_test_accs.append(base_test_pct)
@@ -1557,6 +1661,14 @@ class trainclass:
             self.set_data_info()
             self.train_model()
             pruned_test = self.test_model()
+            pruned_train_by_action = {
+                name: dict(result)
+                for name, result in self.last_train_accuracy_by_class.items()
+            }
+            pruned_test_by_action = {
+                name: dict(result)
+                for name, result in self.last_test_accuracy_by_class.items()
+            }
 
             pruned_test_pct = pruned_test * 100.0
             pruned_test_accs.append(pruned_test_pct)
@@ -1612,6 +1724,38 @@ class trainclass:
                     wr(f"#   {label_name}: (none removed)")
             wr("")
 
+            action_names = sorted(
+                set(base_train_by_action)
+                | set(base_test_by_action)
+                | set(pruned_train_by_action)
+                | set(pruned_test_by_action)
+            )
+            action_row = {"sample_size": size, "actions": {}}
+            for action_name in action_names:
+                display_name = self.class_display_names.get(action_name, action_name)
+                values = {
+                    "base_train": base_train_by_action.get(action_name, {}).get(
+                        "accuracy", float("nan")
+                    ),
+                    "base_test": base_test_by_action.get(action_name, {}).get(
+                        "accuracy", float("nan")
+                    ),
+                    "pruned_train": pruned_train_by_action.get(action_name, {}).get(
+                        "accuracy", float("nan")
+                    ),
+                    "pruned_test": pruned_test_by_action.get(action_name, {}).get(
+                        "accuracy", float("nan")
+                    ),
+                }
+                action_row["actions"][action_name] = values
+                wr_action(
+                    f"{size}\t{display_name} ({action_name})\t"
+                    f"{values['base_train']:.2f}\t{values['base_test']:.2f}\t"
+                    f"{values['pruned_train']:.2f}\t{values['pruned_test']:.2f}"
+                )
+            per_action_results.append(action_row)
+            wr_action("")
+
         # ==========================================================
         # 6) Plot Train/Test (original vs pruned) vs sample size
         # ==========================================================
@@ -1650,8 +1794,82 @@ class trainclass:
 
             wr(f"# Saved accuracy plot: {plot_path}")
 
+            # Keep the original combined plot unchanged and create a second,
+            # separate figure with one panel per action.
+            action_names = sorted(
+                {
+                    action_name
+                    for row in per_action_results
+                    for action_name in row["actions"]
+                }
+            )
+            if action_names:
+                fig, axes = plt.subplots(
+                    len(action_names),
+                    1,
+                    figsize=(7, 4 * len(action_names)),
+                    sharex=True,
+                    squeeze=False,
+                )
+
+                for panel_idx, action_name in enumerate(action_names):
+                    axis = axes[panel_idx][0]
+
+                    def action_values(key):
+                        return np.array(
+                            [
+                                row["actions"].get(action_name, {}).get(
+                                    key, float("nan")
+                                )
+                                for row in per_action_results
+                            ],
+                            dtype=np.float32,
+                        )
+
+                    axis.plot(
+                        sample_sizes_arr, action_values("base_train"),
+                        marker="o", linestyle="--", label="Train (original)"
+                    )
+                    axis.plot(
+                        sample_sizes_arr, action_values("base_test"),
+                        marker="o", linestyle="--", label="Test (original)"
+                    )
+                    axis.plot(
+                        sample_sizes_arr, action_values("pruned_train"),
+                        marker="s", linestyle="-", label="Train (pruned)"
+                    )
+                    axis.plot(
+                        sample_sizes_arr, action_values("pruned_test"),
+                        marker="s", linestyle="-", label="Test (pruned)"
+                    )
+                    display_name = self.class_display_names.get(
+                        action_name, action_name
+                    )
+                    axis.set_title(f"{display_name} ({action_name})")
+                    axis.set_ylabel("Accuracy (%)")
+                    axis.grid(True, linestyle="--", alpha=0.5)
+                    axis.legend()
+
+                axes[-1][0].set_xlabel("Sample Size")
+                fig.suptitle(
+                    f"Per-Action Accuracy vs. Sample Size "
+                    f"(Train {percentage}% / Test {100-percentage}%, "
+                    f"prune={prune_trials})"
+                )
+                fig.tight_layout()
+
+                per_action_plot_path = prune_root / (
+                    f"Accuracy_PerAction_vs_SampleSize_Train{percentage}"
+                    f"_Prune{prune_trials}.png"
+                )
+                fig.savefig(per_action_plot_path, dpi=150)
+                plt.close(fig)
+                wr_action(f"# Saved per-action accuracy plot: {per_action_plot_path}")
+
         wr("")
         wr("=== End of prune run ===")
+        wr_action("")
+        wr_action("=== End of per-action run ===")
 
 
 if __name__ == "__main__":
