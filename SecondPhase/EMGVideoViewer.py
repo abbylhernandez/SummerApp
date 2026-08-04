@@ -13,7 +13,8 @@ from datetime import datetime
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QVBoxLayout,
-    QPushButton, QHBoxLayout, QLineEdit, QInputDialog
+    QPushButton, QHBoxLayout, QInputDialog, QSlider,
+    QScrollArea, QFrame, QSizePolicy, QMessageBox, QComboBox
 )
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import QTimer, Qt
@@ -121,7 +122,7 @@ def find_trials_in_folder(folder):
     vid_nums = {extract_num_generic(p, ("video", "trial")): p for p in video_files}
     audio_nums = {extract_num_generic(p, ("audio",)): p for p in audio_files}
 
-    common = sorted(set(txt_nums) & set(vid_nums) & set(audio_nums))
+    common = sorted(set(txt_nums) & set(vid_nums))
     return [
         {
             "Data": None,
@@ -129,7 +130,7 @@ def find_trials_in_folder(folder):
             "folder": folder,
             "emg_path": txt_nums[n],
             "video_path": vid_nums[n],
-            "audio_path": audio_nums[n],
+            "audio_path": audio_nums.get(n),
         }
         for n in common
     ]
@@ -149,22 +150,47 @@ def find_trials_under_root(root_folder):
 
 def compute_next_destination_for_root(result_root, num_acts=2):
     """
-    Count existing clips under result_root/act1, act2, ...
-    Then alternate: act1/trial1, act2/trial1, act1/trial2, ...
+    Return the first unused destination in alternating act order:
+    act1/trial1, act2/trial1, act1/trial2, ...
+
+    Looking for the first unused path, rather than counting files, prevents a
+    partially populated result tree from pointing at an existing file.
     """
-    total_clips = 0
+    if num_acts < 1:
+        raise ValueError("num_acts must be at least 1")
 
-    if os.path.isdir(result_root):
+    trial_idx = 1
+    while True:
         for act_idx in range(1, num_acts + 1):
-            act_dir = os.path.join(result_root, f"act{act_idx}")
-            if not os.path.isdir(act_dir):
-                continue
-            existing_txt = glob.glob(os.path.join(act_dir, "trial_*.txt"))
-            total_clips += len(existing_txt)
+            candidate = os.path.join(
+                result_root,
+                f"act{act_idx}",
+                f"trial_{trial_idx}.txt",
+            )
+            if not os.path.exists(candidate):
+                return act_idx, trial_idx
+        trial_idx += 1
 
-    act_idx = (total_clips % num_acts) + 1
-    trial_idx = (total_clips // num_acts) + 1
-    return act_idx, trial_idx
+
+def completed_result_trial_numbers(session_folder, num_acts=2):
+    """Return trial numbers that have a saved output for every act label."""
+    result_root = os.path.join(session_folder, "ResultClip")
+    completed_by_act = []
+    for act_idx in range(1, num_acts + 1):
+        numbers = set()
+        pattern = os.path.join(result_root, f"act{act_idx}", "trial_*.txt")
+        for path in glob.glob(pattern):
+            try:
+                numbers.add(extract_num_generic(path, ("trial",)))
+            except ValueError:
+                continue
+        completed_by_act.append(numbers)
+
+    if not completed_by_act:
+        return []
+    return sorted(set.intersection(*completed_by_act))
+
+
 def select_startup_trial_index(trials, num_acts=2):
     """
     Pick the raw trial whose number matches the next ResultClip destination.
@@ -276,6 +302,8 @@ def load_emg_file(emg_path):
     ch3 = []
     button_inline = []
     saw_new = False
+    saw_old = False
+    saw_inline_button = False
 
     with open(emg_path, "r") as f:
         _ = f.readline()  # header
@@ -298,6 +326,7 @@ def load_emg_file(emg_path):
                     else:
                         b = 0
                         if len(parts) >= 5:
+                            saw_inline_button = True
                             try:
                                 b = 1 if int(parts[4]) == 1 else 0
                             except ValueError:
@@ -333,14 +362,18 @@ def load_emg_file(emg_path):
             ch2.append(float(v2_str))
             ch3.append(float(v3_str))
             button_inline.append(0)
+            saw_old = True
 
     if not ch1:
         raise ValueError(f"No data found in {emg_path}")
 
-    if saw_new and len(timestamps_ns) == len(ch1):
+    if saw_new and saw_old:
+        raise ValueError(f"Mixed timestamp formats found in {emg_path}")
+
+    if saw_new:
         t_ns_unwrapped = _unwrap_monotonic_ns(timestamps_ns)
         times_sec = (t_ns_unwrapped - t_ns_unwrapped[0]).astype(np.float64) / 1e9
-        if any(button_inline):
+        if saw_inline_button:
             button = np.asarray(button_inline, dtype=np.int8)
         else:
             button = _load_button_sidecar(_guess_button_path(emg_path), timestamps_ns)
@@ -397,8 +430,8 @@ def load_audio_file(audio_path):
 
 def format_time_from_seconds(s):
     """Convert seconds -> 'HH:MM:SS.mmm' string starting from 00:00:00.xxx."""
-    ms = int(round((s - int(s)) * 1000))
-    total_sec = int(s)
+    total_ms = max(0, int(round(float(s) * 1000.0)))
+    total_sec, ms = divmod(total_ms, 1000)
     h = total_sec // 3600
     m = (total_sec % 3600) // 60
     sec = total_sec % 60
@@ -436,6 +469,31 @@ def resample_emg_clip(times, emg, target_samples):
 
 class EMGVideoViewer(QWidget):
     PLAYBACK_SPEED = 1.0  # 1.0 = full speed
+    DEFAULT_CLIP_SAMPLES = 500
+    THEMES = {
+        "light": {
+            "window": "#eef2f7",
+            "panel": "#ffffff",
+            "text": "#1e293b",
+            "muted": "#64748b",
+            "border": "#bcccdc",
+            "accent": "#2563eb",
+            "plot_bg": "#ffffff",
+            "axis": "#334155",
+            "grid": 0.20,
+        },
+        "dark": {
+            "window": "#0f172a",
+            "panel": "#1e293b",
+            "text": "#e2e8f0",
+            "muted": "#94a3b8",
+            "border": "#334155",
+            "accent": "#3b82f6",
+            "plot_bg": "#111827",
+            "axis": "#94a3b8",
+            "grid": 0.30,
+        },
+    }
 
     def __init__(
         self,
@@ -466,6 +524,10 @@ class EMGVideoViewer(QWidget):
         self.current_trial_index = current_trial_index
         if self.current_trial_index is None:
             self.current_trial_index = self._find_trial_index_by_emg_path(self.emg_path)
+        self.redo_output_trial_idx = None
+        self.selection_history = {}
+        self.completed_trial_buttons = []
+        self.theme_name = "dark"
 
         # how many acts we want to alternate between
         self.num_acts = 2
@@ -481,6 +543,8 @@ class EMGVideoViewer(QWidget):
 
         self.frame_idx = 0
         self.is_paused = False
+        self.segment_stop_time = None
+        self.was_playing_before_seek = False
            # Audio track (extracted from the video) for synced playback.
         self.audio_samples = None
         self.audio_rate = None
@@ -490,17 +554,29 @@ class EMGVideoViewer(QWidget):
         self._play_t_origin = 0.0
         self._extract_audio()
 
-        # For clipping window
-        self.clip_samples = None
-        self.region = None
+        # Two fixed-size clipping windows, one for each label (act1 / act2).
+        self.clip_samples = min(self.DEFAULT_CLIP_SAMPLES, len(self.emg_times))
+        self.label_regions = []
+        self.label_sliders = []
+        self.label_position_labels = []
+        self.region = None  # compatibility alias for the act1 region
         self.button_regions = []
-        if len(self.emg_times) > 1:
-            self.dt_mean = float(np.mean(np.diff(self.emg_times)))
-        else:
-            self.dt_mean = 0.0
+        diffs = np.diff(self.emg_times)
+        positive_diffs = diffs[diffs > 0]
+        self.dt_mean = (
+            float(np.median(positive_diffs)) if len(positive_diffs) else 0.0
+        )
 
         # ------------------ UI SETUP ------------------
         layout = QVBoxLayout(self)
+
+        theme_row = QHBoxLayout()
+        theme_row.addStretch(1)
+        self.btn_theme = QPushButton("Switch to Light Mode")
+        self.btn_theme.setMinimumHeight(30)
+        self.btn_theme.clicked.connect(self.toggle_theme)
+        theme_row.addWidget(self.btn_theme)
+        layout.addLayout(theme_row)
 
         # Video label
         self.video_label = QLabel("Video")
@@ -527,37 +603,142 @@ class EMGVideoViewer(QWidget):
         self._set_audio_y_range()
         self._build_button_regions()
 
-        # ---- Clip controls (samples window) ----
-        clip_layout = QHBoxLayout()
-        self.samples_input = QLineEdit()
-        self.samples_input.setPlaceholderText("Samples (e.g. 300)")
-        self.btn_set_window = QPushButton("Set Window")
-        self.btn_save_clip = QPushButton("Save Clip")
+        # ---- Two-label segmentation controls ----
+        self.window_size_label = QLabel()
+        self.window_size_label.setStyleSheet("font-weight: bold;")
+        layout.addWidget(self.window_size_label)
 
-        clip_layout.addWidget(QLabel("Clip samples:"))
-        clip_layout.addWidget(self.samples_input)
-        clip_layout.addWidget(self.btn_set_window)
-        clip_layout.addWidget(self.btn_save_clip)
-        layout.addLayout(clip_layout)
+        label_colors = ("#3b82f6", "#f59e0b")
+        for label_idx, color in enumerate(label_colors, start=1):
+            row = QHBoxLayout()
+            name = QLabel(f"Act {label_idx}")
+            name.setMinimumWidth(55)
+            name.setStyleSheet(f"font-weight: bold; color: {color};")
 
-        self.btn_set_window.clicked.connect(self.set_clip_window)
-        self.btn_save_clip.clicked.connect(self.save_clip_segment)
+            slider = QSlider(Qt.Horizontal)
+            slider.setTracking(True)
+            slider.setSingleStep(1)
+            slider.setPageStep(self.DEFAULT_CLIP_SAMPLES)
+
+            position = QLabel()
+            position.setMinimumWidth(245)
+
+            row.addWidget(name)
+            row.addWidget(slider, 1)
+            row.addWidget(position)
+            layout.addLayout(row)
+
+            self.label_sliders.append(slider)
+            self.label_position_labels.append(position)
+            slider.valueChanged.connect(
+                lambda value, idx=label_idx: self._update_label_window(idx, value)
+            )
+
+        self.btn_save_both = QPushButton("Save Both Labels")
+        self.btn_save_both.setMinimumHeight(38)
+        self.btn_save_both.setStyleSheet("font-weight: bold;")
+        self.btn_redo = QPushButton("Redo Previous Trial")
+        self.btn_redo.setMinimumHeight(38)
+
+        save_row = QHBoxLayout()
+        save_row.addWidget(self.btn_save_both, 2)
+        save_row.addWidget(self.btn_redo, 1)
+        layout.addLayout(save_row)
+
+        self.btn_save_both.clicked.connect(self.save_both_label_segments)
+        self.btn_redo.clicked.connect(self.redo_previous_trial)
+        self.btn_save_clip = self.btn_save_both  # compatibility alias
+        self._configure_label_windows(reset_positions=True)
 
         # ---- Label showing where the NEXT clip will go ----
         self.next_dest_label = QLabel("")
         layout.addWidget(self.next_dest_label)
         self._update_next_dest_label()
 
+        self.file_mapping_label = QLabel()
+        self.file_mapping_label.setObjectName("fileMappingLabel")
+        self.file_mapping_label.setWordWrap(True)
+        self.file_mapping_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.file_mapping_label.setMinimumHeight(72)
+        layout.addWidget(self.file_mapping_label)
+        self._update_file_mapping_label()
+
+        # ---- Completed trials, matching First Phase's scrollable row ----
+        completed_row = QHBoxLayout()
+        self.completed_count_label = QLabel("Finished:")
+        completed_row.addWidget(self.completed_count_label)
+
+        self.completed_widget = QWidget()
+        self.completed_layout = QHBoxLayout(self.completed_widget)
+        self.completed_layout.setContentsMargins(0, 0, 0, 0)
+        self.completed_layout.setSpacing(6)
+
+        self.completed_scroll = QScrollArea()
+        self.completed_scroll.setWidget(self.completed_widget)
+        self.completed_scroll.setWidgetResizable(True)
+        self.completed_scroll.setFrameShape(QFrame.NoFrame)
+        self.completed_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.completed_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.completed_scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.completed_scroll.setFixedHeight(48)
+        completed_row.addWidget(self.completed_scroll, 1)
+        layout.addLayout(completed_row)
+        self._refresh_completed_trials()
+
         # ---- Playback buttons ----
         btn_layout = QHBoxLayout()
         self.btn_play_pause = QPushButton("Pause")   # playing at start
         self.btn_replay = QPushButton("Replay")
+        self.btn_play_act1 = QPushButton("Play Act 1 Segment")
+        self.btn_play_act2 = QPushButton("Play Act 2 Segment")
         btn_layout.addWidget(self.btn_play_pause)
         btn_layout.addWidget(self.btn_replay)
+        btn_layout.addWidget(self.btn_play_act1)
+        btn_layout.addWidget(self.btn_play_act2)
         layout.addLayout(btn_layout)
 
         self.btn_play_pause.clicked.connect(self.toggle_play_pause)
         self.btn_replay.clicked.connect(self.replay)
+        self.btn_play_act1.clicked.connect(lambda: self.play_label_segment(1))
+        self.btn_play_act2.clicked.connect(lambda: self.play_label_segment(2))
+
+        playback_row = QHBoxLayout()
+        playback_row.addWidget(QLabel("Playback:"))
+        self.playback_slider = QSlider(Qt.Horizontal)
+        frame_count = max(1, int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)))
+        self.playback_slider.setRange(0, frame_count - 1)
+        self.playback_slider.setSingleStep(1)
+        self.playback_slider.setPageStep(max(1, int(self.fps)))
+        self.playback_duration = (frame_count - 1) / self.fps
+        playback_row.addWidget(self.playback_slider, 1)
+
+        self.playback_time_label = QLabel(f"0.00 / {self.playback_duration:.2f} s")
+        self.playback_time_label.setMinimumWidth(125)
+        playback_row.addWidget(self.playback_time_label)
+        playback_row.addWidget(QLabel("Speed:"))
+
+        self.speed_combo = QComboBox()
+        for text, speed in (
+            ("0.25x (very slow)", 0.25),
+            ("0.50x (slow)", 0.50),
+            ("0.75x", 0.75),
+            ("1.00x (normal)", 1.00),
+            ("1.50x", 1.50),
+            ("2.00x (fast)", 2.00),
+            ("4.00x (very fast)", 4.00),
+        ):
+            self.speed_combo.addItem(text, speed)
+        self.speed_combo.setCurrentIndex(3)
+        playback_row.addWidget(self.speed_combo)
+        self.speed_audio_label = QLabel("Audio on")
+        self.speed_audio_label.setMinimumWidth(85)
+        playback_row.addWidget(self.speed_audio_label)
+        layout.addLayout(playback_row)
+
+        self.playback_slider.sliderPressed.connect(self._playback_seek_started)
+        self.playback_slider.sliderMoved.connect(self._seek_playback_frame)
+        self.playback_slider.sliderReleased.connect(self._playback_seek_finished)
+        self.speed_combo.currentIndexChanged.connect(self._playback_speed_changed)
 
         self.btn_load_other = QPushButton("Load Another Trial")
         layout.addWidget(self.btn_load_other)
@@ -567,7 +748,8 @@ class EMGVideoViewer(QWidget):
         self.timer = QTimer(self)
         self.interval_ms = self._playback_interval_ms()
         self.timer.timeout.connect(self._update_frame)
-        self.timer.start(self.interval_ms)
+        self._apply_theme(self.theme_name)
+        self._begin_playback()
 
     # ------------------------------------------------------------------
     # Helpers: clip destinations (act1/act2, trial index)
@@ -581,6 +763,87 @@ class EMGVideoViewer(QWidget):
 
     def _playback_interval_ms(self):
         return max(1, int(round(1000 / (self.fps * self.PLAYBACK_SPEED))))
+
+    def toggle_theme(self):
+        """Switch the complete viewer between dark and light themes."""
+        next_theme = "light" if self.theme_name == "dark" else "dark"
+        self._apply_theme(next_theme)
+
+    def _apply_theme(self, theme_name):
+        """Apply colors to Qt controls and the pyqtgraph plot together."""
+        self.theme_name = theme_name
+        pal = self.THEMES[theme_name]
+        self.setStyleSheet(
+            f"""
+            QWidget {{
+                background-color: {pal['window']};
+                color: {pal['text']};
+            }}
+            QLabel {{
+                color: {pal['text']};
+                background: transparent;
+            }}
+            QPushButton {{
+                background-color: {pal['panel']};
+                color: {pal['text']};
+                border: 1px solid {pal['border']};
+                border-radius: 6px;
+                padding: 4px 10px;
+            }}
+            QPushButton:hover {{ border-color: {pal['accent']}; }}
+            QPushButton:pressed {{ background-color: {pal['accent']}; color: white; }}
+            QPushButton:disabled {{ color: {pal['muted']}; }}
+            QComboBox {{
+                background-color: {pal['panel']};
+                color: {pal['text']};
+                border: 1px solid {pal['border']};
+                border-radius: 5px;
+                padding: 4px 8px;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {pal['panel']};
+                color: {pal['text']};
+                selection-background-color: {pal['accent']};
+            }}
+            QScrollArea {{
+                background: transparent;
+                border: none;
+            }}
+            QSlider::groove:horizontal {{
+                height: 6px;
+                background: {pal['border']};
+                border-radius: 3px;
+            }}
+            QSlider::handle:horizontal {{
+                background: {pal['accent']};
+                border: 1px solid {pal['text']};
+                width: 16px;
+                margin: -6px 0;
+                border-radius: 8px;
+            }}
+            """
+        )
+        self.video_label.setStyleSheet(
+            f"background-color: #000000; border: 1px solid {pal['border']};"
+        )
+        self.file_mapping_label.setStyleSheet(
+            f"background-color: {pal['panel']}; color: {pal['text']};"
+            f" border: 1px solid {pal['border']}; border-radius: 6px;"
+            " padding: 7px; font-weight: 600;"
+        )
+        self.plot_widget.setBackground(pal["plot_bg"])
+        plot_item = self.plot_widget.getPlotItem()
+        plot_item.showGrid(x=True, y=True, alpha=pal["grid"])
+        for axis_name in ("left", "bottom", "right"):
+            axis = plot_item.getAxis(axis_name)
+            axis.setPen(pg.mkPen(pal["axis"]))
+            axis.setTextPen(pg.mkPen(pal["axis"]))
+
+        self.btn_theme.setText(
+            "Switch to Light Mode" if theme_name == "dark"
+            else "Switch to Dark Mode"
+        )
+
    # ------------------------------------------------------------------
     # Audio playback (extracted from the video's embedded track)
 
@@ -591,19 +854,19 @@ class EMGVideoViewer(QWidget):
         self.audio_player = None
         if not AUDIO_OK or not self.video_path:
             return
+        tmp = None
         try:
             ff = imageio_ffmpeg.get_ffmpeg_exe()
-            tmp = tempfile.mktemp(suffix=".wav")
+            fd, tmp = tempfile.mkstemp(suffix=".wav")
+            os.close(fd)
             cmd = [ff, "-y", "-i", self.video_path,
                    "-vn", "-ac", "1", "-ar", "44100", "-f", "wav", tmp]
             flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL, creationflags=flags)
-            wf = wave.open(tmp, "rb")
-            self.audio_rate = wf.getframerate()
-            frames = wf.readframes(wf.getnframes())
-            wf.close()
-            os.remove(tmp)
+            with wave.open(tmp, "rb") as wf:
+                self.audio_rate = wf.getframerate()
+                frames = wf.readframes(wf.getnframes())
             samples = np.frombuffer(frames, dtype=np.int16)
             if samples.size > 0:
                 self.audio_samples = samples
@@ -613,6 +876,12 @@ class EMGVideoViewer(QWidget):
             self.audio_samples = None
             self.audio_rate = None
             self.audio_player = None
+        finally:
+            if tmp and os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
 
     def _start_audio(self, t_s):
         # Only play at 1x; other speeds would change pitch / break sync.
@@ -626,6 +895,7 @@ class EMGVideoViewer(QWidget):
     def _stop_audio(self):
         if self.audio_player is not None:
             self.audio_player.stop()
+        self.audio_master = False
 
     def _begin_playback(self):
         """(Re)start playback from the current frame. At 1x the audio is the
@@ -636,25 +906,13 @@ class EMGVideoViewer(QWidget):
         self.btn_play_pause.setText("Pause")
         self._play_t0 = time.perf_counter()
         self._play_t_origin = self.frame_idx / self.fps
-        self.audio_master = (
-            abs(self.PLAYBACK_SPEED - 1.0) < 1e-6 and self.audio_player is not None
-        )
         self._start_audio(self._play_t_origin)
+        self.audio_master = (
+            abs(self.PLAYBACK_SPEED - 1.0) < 1e-6
+            and self.audio_player is not None
+            and self.audio_player.active()
+        )
         self.timer.start(self.interval_ms)
-
-    def _setup_audio_overlay(self):
-        self.audio_view = pg.ViewBox()
-        self.plot_widget.showAxis("right")
-        self.plot_widget.scene().addItem(self.audio_view)
-        self.plot_widget.getAxis("right").linkToView(self.audio_view)
-        self.plot_widget.getAxis("right").setLabel("Audio amp")
-        self.audio_view.setXLink(self.plot_widget)
-
-        audio_pen = pg.mkPen((255, 220, 0), width=2)
-        self.curve_audio = pg.PlotCurveItem(pen=audio_pen, name="audio")
-        
-        # Uncomment this line to show the audio signal over the EMG graph.
-        # self.audio_view.addItem(self.curve_audio)
 
     def _setup_audio_overlay(self):
         self.audio_view = pg.ViewBox()
@@ -744,25 +1002,7 @@ class EMGVideoViewer(QWidget):
             i += 1
 
     def _compute_next_destination_for_root(self, result_root):
-        """
-        Same logic as before, but parameterized by result_root.
-        Count how many trial_*.txt exist under result_root/act1, act2, ...
-        Then alternate: act1/trial1, act2/trial1, act1/trial2, ...
-        """
-        num_acts = self.num_acts
-        total_clips = 0
-
-        if os.path.isdir(result_root):
-            for act_idx in range(1, num_acts + 1):
-                act_dir = os.path.join(result_root, f"act{act_idx}")
-                if not os.path.isdir(act_dir):
-                    continue
-                existing_txt = glob.glob(os.path.join(act_dir, "trial_*.txt"))
-                total_clips += len(existing_txt)
-
-        act_idx = (total_clips % num_acts) + 1
-        trial_idx = (total_clips // num_acts) + 1
-        return act_idx, trial_idx
+        return compute_next_destination_for_root(result_root, self.num_acts)
 
     def _compute_next_destination(self):
         """
@@ -773,18 +1013,208 @@ class EMGVideoViewer(QWidget):
         return self._compute_next_destination_for_root(result_root)
 
     def _update_next_dest_label(self):
-        """Update the GUI text that tells where the next clip will go (ResultClip)."""
+        """Describe the paired-label destination for the next save."""
+        if self.redo_output_trial_idx is not None:
+            self.next_dest_label.setText(
+                f"Redo mode: saving will replace both labels for "
+                f"trial_{self.redo_output_trial_idx}."
+            )
+            if hasattr(self, "file_mapping_label"):
+                self._update_file_mapping_label()
+            return
+
         act_idx, trial_idx = self._compute_next_destination()
-        self.next_dest_label.setText(
-            f"Next clip will be saved to: act{act_idx} / trial_{trial_idx}"
+        if self._trial_for_output_index(trial_idx) is None:
+            self.next_dest_label.setText(
+                "All available trials are labeled. Select a finished trial to redo it."
+            )
+            if hasattr(self, "file_mapping_label"):
+                self._update_file_mapping_label()
+            return
+
+        if act_idx == 1:
+            text = (
+                f"Ready: both labels will be saved as trial_{trial_idx} "
+                "in act1 and act2."
+            )
+        else:
+            text = (
+                f"Recovery mode: act1/trial_{trial_idx} already exists; "
+                "the Act 2 selection will complete the pair."
+            )
+        self.next_dest_label.setText(text)
+        if hasattr(self, "file_mapping_label"):
+            self._update_file_mapping_label()
+
+    def _update_file_mapping_label(self):
+        """Show the exact source files and paired Act 1/Act 2 destinations."""
+        if self.redo_output_trial_idx is not None:
+            output_trial_idx = self.redo_output_trial_idx
+            redo_mode = True
+        else:
+            _next_act, output_trial_idx = self._compute_next_destination()
+            redo_mode = False
+        has_pending_source = (
+            redo_mode or self._trial_for_output_index(output_trial_idx) is not None
         )
 
+        base_dir = os.path.dirname(self.emg_path)
+        result_root = os.path.join(base_dir, "ResultClip")
+        act_paths = {
+            act_idx: os.path.join(
+                result_root,
+                f"act{act_idx}",
+                f"trial_{output_trial_idx}.txt",
+            )
+            for act_idx in range(1, self.num_acts + 1)
+        }
+
+        source_trial_num = "?"
+        if (
+            self.current_trial_index is not None
+            and 0 <= self.current_trial_index < len(self.available_trials)
+        ):
+            source_trial_num = self.available_trials[self.current_trial_index]["trial_num"]
+
+        def destination_status(path):
+            if redo_mode:
+                return "REPLACE"
+            if not has_pending_source:
+                return "NO PENDING SAVE"
+            return "SAVED" if os.path.exists(path) else "NEXT SAVE"
+
+        session_name = os.path.basename(os.path.normpath(base_dir))
+        source_files = [os.path.basename(self.emg_path), os.path.basename(self.video_path)]
+        if self.audio_path:
+            source_files.append(os.path.basename(self.audio_path))
+
+        if has_pending_source:
+            act1_relative = os.path.relpath(act_paths[1], base_dir)
+            act2_relative = os.path.relpath(act_paths[2], base_dir)
+        else:
+            act1_relative = "--"
+            act2_relative = "--"
+        self.file_mapping_label.setText(
+            f"USING SOURCE TRIAL {source_trial_num}  |  Session: {session_name}\n"
+            f"Source files: {'  +  '.join(source_files)}\n"
+            f"Act 1 [{destination_status(act_paths[1])}]: {act1_relative}\n"
+            f"Act 2 [{destination_status(act_paths[2])}]: {act2_relative}"
+        )
+        self.file_mapping_label.setToolTip(
+            f"Source EMG: {self.emg_path}\n"
+            f"Source video: {self.video_path}\n"
+            f"Source audio: {self.audio_path or 'none'}\n"
+            f"Act 1 output: {act_paths[1]}\n"
+            f"Act 2 output: {act_paths[2]}"
+        )
+
+    def _refresh_completed_trials(self):
+        """Rebuild the First Phase-style row of fully labeled trials."""
+        while self.completed_layout.count():
+            item = self.completed_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        completed = completed_result_trial_numbers(self.folder, self.num_acts)
+        total = len(self.available_trials)
+        self.completed_count_label.setText(f"Finished: {len(completed)} / {total}")
+        self.completed_trial_buttons = []
+
+        if not completed:
+            empty = QLabel("No labeled trials yet")
+            empty.setStyleSheet("color: #777;")
+            self.completed_layout.addWidget(empty)
+        else:
+            for trial_idx in completed:
+                button = QPushButton(f"Trial {trial_idx} done")
+                button.setToolTip("Click to load this completed trial for redo")
+                button.setStyleSheet(
+                    "QPushButton { border: 1px solid #27ae60; border-radius: 6px;"
+                    " padding: 3px 8px; color: #1f7a42; font-weight: bold; }"
+                    "QPushButton:hover { background: #eafaf0; }"
+                )
+                button.clicked.connect(
+                    lambda _checked=False, n=trial_idx: self._enter_redo_mode(n)
+                )
+                self.completed_layout.addWidget(button)
+                self.completed_trial_buttons.append(button)
+
+        self.completed_layout.addStretch(1)
+        self.btn_redo.setEnabled(bool(completed))
+        available_numbers = {trial["trial_num"] for trial in self.available_trials}
+        all_finished = bool(available_numbers) and available_numbers.issubset(completed)
+        self.btn_save_both.setEnabled(
+            self.redo_output_trial_idx is not None or not all_finished
+        )
+
+    def _trial_for_output_index(self, output_trial_idx):
+        """Find the source recording corresponding to an output trial number."""
+        history = self.selection_history.get(output_trial_idx)
+        if history is not None:
+            source_index = history.get("source_index")
+            if source_index is not None and 0 <= source_index < len(self.available_trials):
+                return self.available_trials[source_index]
+
+        for trial in self.available_trials:
+            if trial["trial_num"] == output_trial_idx:
+                return trial
+        return None
+
+    def _enter_redo_mode(self, output_trial_idx):
+        """Load a completed source trial and prepare its outputs for replacement."""
+        if output_trial_idx not in completed_result_trial_numbers(
+            self.folder, self.num_acts
+        ):
+            print(f"Trial {output_trial_idx} is not fully labeled yet.")
+            self._refresh_completed_trials()
+            return
+
+        selected_trial = self._trial_for_output_index(output_trial_idx)
+        if selected_trial is None:
+            print(f"Could not find source recording for trial {output_trial_idx}.")
+            return
+
+        self.redo_output_trial_idx = output_trial_idx
+        if not self._load_trial(selected_trial):
+            self.redo_output_trial_idx = None
+            self._update_next_dest_label()
+            return
+
+        history = self.selection_history.get(output_trial_idx)
+        if history is not None:
+            for slider, start_idx in zip(
+                self.label_sliders,
+                history.get("starts", []),
+            ):
+                slider.setValue(start_idx)
+
+        self.btn_save_both.setText("Replace Both Labels")
+        self._update_next_dest_label()
+
+    def redo_previous_trial(self):
+        """Open the most recently finished trial for correction."""
+        completed = completed_result_trial_numbers(self.folder, self.num_acts)
+        if not completed:
+            print("There is no finished trial to redo.")
+            return
+        self._enter_redo_mode(completed[-1])
+
     # ------------------------ EMG save helper ----------------------------
-    def _save_clip_to_root(self, root_name, idx, target_emg_samples=None):
+    def _save_clip_to_root(
+        self,
+        root_name,
+        idx,
+        target_emg_samples=None,
+        destination=None,
+        overwrite=False,
+    ):
         """Save an EMG clip or resampled EMG variant without copying A/V."""
         if len(idx) == 0:
             print(f"[{root_name}] No samples to save.")
             return
+        if overwrite and destination is None:
+            raise ValueError("overwrite requires an explicit destination")
 
         base_dir = os.path.dirname(self.emg_path)
         result_root = os.path.join(base_dir, root_name)
@@ -800,20 +1230,57 @@ class EMGVideoViewer(QWidget):
 
         times_clip = times_clip_abs - times_clip_abs[0]
 
-        act_idx, trial_idx = self._compute_next_destination_for_root(result_root)
-        act_dir = os.path.join(result_root, f"act{act_idx}")
-        os.makedirs(act_dir, exist_ok=True)
+        while True:
+            if destination is None:
+                act_idx, trial_idx = self._compute_next_destination_for_root(result_root)
+            else:
+                act_idx, trial_idx = destination
+            act_dir = os.path.join(result_root, f"act{act_idx}")
+            os.makedirs(act_dir, exist_ok=True)
+            emg_out_path = os.path.join(act_dir, f"trial_{trial_idx}.txt")
 
-        emg_out_path = os.path.join(act_dir, f"trial_{trial_idx}.txt")
+            temp_path = None
+            try:
+                if overwrite:
+                    fd, temp_path = tempfile.mkstemp(
+                        prefix=f".trial_{trial_idx}_",
+                        suffix=".tmp",
+                        dir=act_dir,
+                    )
+                    os.close(fd)
+                    write_path = temp_path
+                    mode = "w"
+                else:
+                    write_path = emg_out_path
+                    mode = "x"
 
-        with open(emg_out_path, "w") as f:
-            f.write("timestamp\tch1\tch2\tch3\n")
-            for t_sec, (c1, c2, c3) in zip(times_clip, emg_clip):
-                ts_formatted = format_time_from_seconds(t_sec)
-                f.write(f"{ts_formatted}\t{c1:.6f}\t{c2:.6f}\t{c3:.6f}\n")
+                with open(write_path, mode) as f:
+                    f.write("timestamp\tch1\tch2\tch3\n")
+                    for t_sec, (c1, c2, c3) in zip(times_clip, emg_clip):
+                        ts_formatted = format_time_from_seconds(t_sec)
+                        f.write(
+                            f"{ts_formatted}\t{c1:.6f}\t{c2:.6f}\t{c3:.6f}\n"
+                        )
+                if overwrite:
+                    os.replace(temp_path, emg_out_path)
+                    temp_path = None
+                break
+            except FileExistsError:
+                if destination is not None:
+                    print(f"[{root_name}] Keeping existing file: {emg_out_path}")
+                    return None
+                # Another save won the automatic destination race; retry.
+                continue
+            finally:
+                if temp_path and os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except OSError:
+                        pass
 
+        action = "Replaced" if overwrite else "Saved"
         print(
-            f"[{root_name}] Saved EMG clip with {len(times_clip)} samples to: "
+            f"[{root_name}] {action} EMG clip with {len(times_clip)} samples at: "
             f"{emg_out_path}"
         )
 
@@ -826,34 +1293,58 @@ class EMGVideoViewer(QWidget):
     # --------------- Clip window logic -----------------
     def _load_trial(self, selected_trial):
         """Reload viewer with a selected trial, reusing this window."""
-        self.timer.stop()
-        self._stop_audio()
-        self.is_paused = True
-        self.btn_play_pause.setText("Play")
-        self.load_audio = True
         n = selected_trial["trial_num"]
         new_emg_path = selected_trial["emg_path"]
         new_video_path = selected_trial["video_path"]
         new_audio_path = selected_trial["audio_path"]
+
+        # Validate every new resource before replacing the working trial.
+        try:
+            new_times, new_data, new_button = load_emg_file(new_emg_path)
+            new_audio_times, new_audio_data = load_audio_file(new_audio_path)
+        except Exception as e:
+            print(f"Could not load trial {n}: {e}")
+            return False
+
+        new_cap = cv2.VideoCapture(new_video_path)
+        if not new_cap.isOpened():
+            new_cap.release()
+            print("Could not open new video:", new_video_path)
+            return False
+
+        new_fps = new_cap.get(cv2.CAP_PROP_FPS)
+        if new_fps <= 0:
+            new_fps = 30.0
+
         print(f"Loading trial {n}:")
         print("  EMG  :", new_emg_path)
         print("  Video:", new_video_path)
         print("  Audio:", new_audio_path)
 
-        new_times, new_data, new_button = load_emg_file(new_emg_path)
+        self.timer.stop()
+        self._stop_audio()
+        old_cap = self.cap
 
         self.emg_times = new_times
         self.emg_data = new_data
         self.button_data = new_button
         self.emg_path = new_emg_path
         self.audio_path = new_audio_path
-        self.audio_times, self.audio_data = load_audio_file(self.audio_path)
+        self.audio_times = new_audio_times
+        self.audio_data = new_audio_data
         self.folder = os.path.dirname(self.emg_path)
+        self.video_path = new_video_path
+        self.cap = new_cap
+        self.fps = new_fps
 
-        if len(self.emg_times) > 1:
-            self.dt_mean = float(np.mean(np.diff(self.emg_times)))
-        else:
-            self.dt_mean = 0.0
+        if old_cap is not None:
+            old_cap.release()
+
+        diffs = np.diff(self.emg_times)
+        positive_diffs = diffs[diffs > 0]
+        self.dt_mean = (
+            float(np.median(positive_diffs)) if len(positive_diffs) else 0.0
+        )
 
         self.curve_ch1.clear()
         self.curve_ch2.clear()
@@ -861,64 +1352,56 @@ class EMGVideoViewer(QWidget):
         self.curve_audio.clear()
         self._clear_button_regions()
 
-        if self.region is not None:
-            self.plot_widget.removeItem(self.region)
-            self.region = None
+        for region in self.label_regions:
+            self.plot_widget.removeItem(region)
+        self.label_regions = []
+        self.region = None
 
         self.plot_widget.setXRange(0, self.emg_times[-1], padding=0)
         self._set_audio_y_range()
         self._build_button_regions()
 
-        if self.cap is not None:
-            self.cap.release()
-
-        self.video_path = new_video_path
-        self.cap = cv2.VideoCapture(self.video_path)
-        if not self.cap.isOpened():
-            print("Could not open new video:", self.video_path)
-            return
-
-        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
-        if self.fps <= 0:
-            self.fps = 30.0
-
         self._extract_audio()
         self.interval_ms = self._playback_interval_ms()
         self.frame_idx = 0
+        self.segment_stop_time = None
+        frame_count = max(1, int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)))
+        self.playback_duration = (frame_count - 1) / self.fps
+        self.playback_slider.blockSignals(True)
+        self.playback_slider.setRange(0, frame_count - 1)
+        self.playback_slider.setValue(0)
+        self.playback_slider.blockSignals(False)
+        self.playback_time_label.setText(
+            f"0.00 / {self.playback_duration:.2f} s"
+        )
 
-        self.is_paused = False
-        self.btn_play_pause.setText("Pause")
-        self.timer.start(self.interval_ms)
-
-        if self.clip_samples is not None:
-            self.samples_input.setText(str(self.clip_samples))
-            self.set_clip_window()
+        self._configure_label_windows(reset_positions=True)
 
         # Update label in case emg_path changed
-        self._update_next_dest_label()
         self.current_trial_index = self._find_trial_index_by_emg_path(self.emg_path)
+        self._refresh_completed_trials()
+        self._update_next_dest_label()
         self.setWindowTitle(f"Trial {n} - EMG + Video")
+        self._begin_playback()
         return True
 
     def load_next_trial(self):
-        """Load the next discovered trial after finishing act2."""
-        if self.current_trial_index is None:
-            self.current_trial_index = self._find_trial_index_by_emg_path(self.emg_path)
-
-        if self.current_trial_index is None:
-            print("Could not determine the current trial, so the next trial was not loaded.")
+        """Immediately load the next unfinished source trial after a paired save."""
+        _next_act, next_output_trial = self._compute_next_destination()
+        selected_trial = self._trial_for_output_index(next_output_trial)
+        if selected_trial is None:
+            print("All available trials have been labeled.")
             return False
 
-        next_index = self.current_trial_index + 1
-        if next_index >= len(self.available_trials):
-            print("No next trial found.")
-            return False
-
-        print("Act 2 clip saved. Loading next trial automatically.")
-        return self._load_trial(self.available_trials[next_index])
+        print(
+            f"Both label clips saved. Loading trial "
+            f"{selected_trial['trial_num']} automatically."
+        )
+        return self._load_trial(selected_trial)
 
     def load_other_trial(self):
         """Reload viewer with another trial in the same folder, reusing this window."""
+        was_paused = self.is_paused
         self.timer.stop()
         self._stop_audio()
         self.is_paused = True
@@ -931,9 +1414,8 @@ class EMGVideoViewer(QWidget):
         common = sorted(trials_by_num)
         if not common:
             print("No more trials found.")
-            self.timer.start(self.interval_ms)
-            self.is_paused = False
-            self.btn_play_pause.setText("Pause")
+            if not was_paused:
+                self._begin_playback()
             return
 
         n, ok = QInputDialog.getInt(
@@ -946,148 +1428,283 @@ class EMGVideoViewer(QWidget):
         )
 
         if not ok or n not in common:
-            self.timer.start(self.interval_ms)
-            self.is_paused = False
-            self.btn_play_pause.setText("Pause")
+            if not was_paused:
+                self._begin_playback()
             return
 
-        self._load_trial(trials_by_num[n])
+        self.redo_output_trial_idx = None
+        self.btn_save_both.setText("Save Both Labels")
+        if not self._load_trial(trials_by_num[n]) and not was_paused:
+            self._begin_playback()
+
+    def _configure_label_windows(self, reset_positions=False):
+        """Configure the two bottom sliders and their plot highlights."""
+        self.clip_samples = min(self.DEFAULT_CLIP_SAMPLES, len(self.emg_times))
+        max_start = max(0, len(self.emg_times) - self.clip_samples)
+        self.window_size_label.setText(
+            f"Segmentation window: {self.clip_samples} samples (fixed)"
+        )
+
+        region_styles = (
+            ((59, 130, 246, 65), (59, 130, 246, 220)),
+            ((245, 158, 11, 65), (245, 158, 11, 220)),
+        )
+        while len(self.label_regions) < self.num_acts:
+            brush, pen = region_styles[len(self.label_regions)]
+            region = pg.LinearRegionItem(
+                movable=False,
+                brush=brush,
+                pen=pen,
+            )
+            region.setZValue(-10 + len(self.label_regions))
+            self.plot_widget.addItem(region)
+            self.label_regions.append(region)
+
+        self.region = self.label_regions[0]
+
+        for zero_based, slider in enumerate(self.label_sliders):
+            slider.blockSignals(True)
+            slider.setRange(0, max_start)
+            if reset_positions:
+                # Put Act 1 at the beginning and Act 2 at the end so both
+                # colored windows are immediately visible and independent.
+                start_idx = 0 if zero_based == 0 else max_start
+                slider.setValue(start_idx)
+            else:
+                start_idx = min(slider.value(), max_start)
+                slider.setValue(start_idx)
+            slider.blockSignals(False)
+            self._update_label_window(zero_based + 1, start_idx)
+
+    def _update_label_window(self, label_idx, start_idx):
+        """Move one label window using a sample-index slider value."""
+        if not self.label_regions or len(self.emg_times) == 0:
+            return
+
+        zero_based = label_idx - 1
+        max_start = max(0, len(self.emg_times) - self.clip_samples)
+        start_idx = max(0, min(int(start_idx), max_start))
+        end_idx = min(start_idx + self.clip_samples, len(self.emg_times))
+
+        t_start = float(self.emg_times[start_idx])
+        t_end = float(self.emg_times[end_idx - 1])
+        self.label_regions[zero_based].setBounds(
+            [float(self.emg_times[0]), float(self.emg_times[-1])]
+        )
+        self.label_regions[zero_based].setRegion((t_start, t_end))
+        self.label_position_labels[zero_based].setText(
+            f"samples {start_idx + 1}-{end_idx}  |  {t_start:.3f}-{t_end:.3f} s"
+        )
+
+    def _indices_for_label(self, label_idx):
+        start_idx = self.label_sliders[label_idx - 1].value()
+        end_idx = min(start_idx + self.clip_samples, len(self.emg_times))
+        return np.arange(start_idx, end_idx)
 
     def set_clip_window(self):
-        """Create or update the highlighted window based on user sample input."""
-        text = self.samples_input.text().strip()
-        if not text:
-            print("No sample count entered.")
-            return
-        try:
-            n = int(text)
-        except ValueError:
-            print("Invalid sample count.")
-            return
+        """Compatibility helper: refresh both fixed 500-sample windows."""
+        self._configure_label_windows(reset_positions=False)
 
-        n = max(1, min(n, len(self.emg_times)))
-        self.clip_samples = n
+    def _save_label_outputs(self, act_idx, trial_idx, idx, overwrite=False):
+        """Save one explicitly labeled window and all of its resampled forms."""
+        sizes = [
+            200, 250, 300, 350, 400,
+            450, 500, 550, 600, 650,
+            700, 750, 800, 900, 1000,
+        ]
+        destination = (act_idx, trial_idx)
 
-        if self.dt_mean <= 0:
-            width = 0.0
-        else:
-            width = self.dt_mean * (n - 1)
-
-        t_start = float(self.emg_times[0])
-        t_end = min(t_start + width, float(self.emg_times[-1]))
-
-        if self.region is None:
-            self.region = pg.LinearRegionItem(
-                values=(t_start, t_end),
-                movable=True,
-                brush=(50, 50, 200, 50)
-            )
-            self.region.setZValue(-10)
-            self.region.setBounds([float(self.emg_times[0]),
-                                   float(self.emg_times[-1])])
-            self.plot_widget.addItem(self.region)
-        else:
-            self.region.setRegion((t_start, t_end))
-
-        print(f"Clip window set: {n} samples, approx width {width:.4f} s")
-
-    def save_clip_segment(self):
-        """
-        Save EMG samples inside the current window without copying video/audio.
-
-        - Base behavior: saves to ResultClip/actX/trial_Y.*  (unchanged)
-        - If clip_samples == 500, resamples only that EMG window to several
-          sample counts. Original video/audio remain in the session folder.
-        """
-        if self.region is None:
-            print("No clip window defined.")
-            return
-
-        t_min, t_max = self.region.getRegion()
-        t_min = float(t_min)
-        t_max = float(t_max)
-
-        # ---- EMG indices based on clip_samples (base clip) ----
-        if self.clip_samples is not None:
-            start_idx = int(np.searchsorted(self.emg_times, t_min, side="left"))
-            end_idx = start_idx + self.clip_samples
-            end_idx = min(end_idx, len(self.emg_times))
-            if start_idx >= end_idx:
-                print("Selected window has no samples.")
-                return
-            idx = np.arange(start_idx, end_idx)
-        else:
-            mask = (self.emg_times >= t_min) & (self.emg_times <= t_max)
-            idx = np.where(mask)[0]
-            if len(idx) == 0:
-                print("Selected window has no samples.")
-                return
-
-        # ------------ Save base clip exactly as before ------------
-        base_save = self._save_clip_to_root("ResultClip", idx)
-
-        # ---------------- Resample only EMG to each size ----------------------
-        if self.clip_samples == 500:
-            sizes = [
-                200, 250, 300, 350, 400,
-                450, 500, 550, 600, 650,
-                700, 750, 800, 900, 1000
-            ]
-            for n in sizes:
-                root_name = f"ResultClipSizeUp{n}"
+        # Save derived files first and the base ResultClip last. The base file
+        # remains the completion marker used by recovery and startup logic.
+        if self.clip_samples == self.DEFAULT_CLIP_SAMPLES:
+            for size in sizes:
                 self._save_clip_to_root(
-                    root_name,
+                    f"ResultClipSizeUp{size}",
                     idx,
-                    target_emg_samples=n,
+                    target_emg_samples=size,
+                    destination=destination,
+                    overwrite=overwrite,
                 )
 
-        if base_save and base_save["act_idx"] == self.num_acts:
-            loaded_next = self.load_next_trial()
-            if not loaded_next:
+        return self._save_clip_to_root(
+            "ResultClip",
+            idx,
+            destination=destination,
+            overwrite=overwrite,
+        )
+
+    def _save_both_label_segments(self):
+        """Save Act 1 and Act 2 selections together as one paired trial."""
+        if len(self.label_regions) != self.num_acts:
+            print("The two label windows are not ready.")
+            return
+
+        is_redo = self.redo_output_trial_idx is not None
+        if is_redo:
+            trial_idx = self.redo_output_trial_idx
+            first_act = 1
+        else:
+            first_act, trial_idx = self._compute_next_destination()
+
+        acts_to_save = range(first_act, self.num_acts + 1)
+        starts = [slider.value() for slider in self.label_sliders]
+        source_index = self.current_trial_index
+        final_save = None
+
+        for act_idx in acts_to_save:
+            idx = self._indices_for_label(act_idx)
+            if len(idx) != self.clip_samples:
+                print(f"Act {act_idx} does not contain {self.clip_samples} samples.")
+                return
+            final_save = self._save_label_outputs(
+                act_idx,
+                trial_idx,
+                idx,
+                overwrite=is_redo,
+            )
+            if final_save is None:
+                print(f"Act {act_idx} was not saved; staying on the current trial.")
+                self._update_next_dest_label()
+                return
+
+        if final_save and final_save["act_idx"] == self.num_acts:
+            if is_redo or first_act == 1:
+                self.selection_history[trial_idx] = {
+                    "source_index": source_index,
+                    "starts": starts,
+                }
+
+            if is_redo:
+                self.redo_output_trial_idx = None
+                print(f"Trial {trial_idx} labels were replaced successfully.")
+
+            self._refresh_completed_trials()
+            if not self.load_next_trial():
                 self._update_next_dest_label()
         else:
             self._update_next_dest_label()
+
+    def save_both_label_segments(self):
+        """Guard the paired save against accidental repeated clicks."""
+        if not self.btn_save_both.isEnabled():
+            return
+
+        if self.redo_output_trial_idx is not None:
+            answer = QMessageBox.question(
+                self,
+                "Replace saved labels?",
+                f"Replace both saved labels for trial "
+                f"{self.redo_output_trial_idx}?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
+
+        self.btn_save_both.setEnabled(False)
+        self.btn_save_both.setText("Saving Both Labels...")
+        QApplication.processEvents()
+        try:
+            self._save_both_label_segments()
+        finally:
+            button_text = (
+                "Replace Both Labels"
+                if self.redo_output_trial_idx is not None
+                else "Save Both Labels"
+            )
+            self.btn_save_both.setText(button_text)
+            _next_act, next_output_trial = self._compute_next_destination()
+            has_pending_source = (
+                self._trial_for_output_index(next_output_trial) is not None
+            )
+            self.btn_save_both.setEnabled(
+                self.redo_output_trial_idx is not None or has_pending_source
+            )
+
+    def save_clip_segment(self):
+        """Compatibility alias for the new paired-label save action."""
+        self.save_both_label_segments()
 
 
     # --------------- Playback controls -----------------
     def toggle_play_pause(self):
         if self.is_paused:
-            self.timer.start(self.interval_ms)
-            self.is_paused = False
-            self.btn_play_pause.setText("Pause")
+            self._begin_playback()
         else:
-            self.timer.stop()
-            self.is_paused = True
-            self.btn_play_pause.setText("Play")
+            self._pause_playback()
 
-    def replay(self):
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        self.frame_idx = 0
+    def _pause_playback(self):
+        self.timer.stop()
+        self._stop_audio()
+        self.is_paused = True
+        self.btn_play_pause.setText("Play")
 
-        self.curve_ch1.clear()
-        self.curve_ch2.clear()
-        self.curve_ch3.clear()
-        self.curve_audio.clear()
+    def _playback_speed_changed(self, _index=None):
+        """Apply a new synchronized video/plot playback speed."""
+        speed = float(self.speed_combo.currentData())
+        was_playing = not self.is_paused
+        self.timer.stop()
+        self._stop_audio()
+        self.PLAYBACK_SPEED = speed
+        self.interval_ms = self._playback_interval_ms()
+        self.speed_audio_label.setText("Audio on" if speed == 1.0 else "Audio muted")
+        if was_playing:
+            self._begin_playback()
 
-        if self.is_paused:
-            self.is_paused = False
-            self.btn_play_pause.setText("Pause")
-        self.timer.start(self.interval_ms)
+    def _playback_seek_started(self):
+        self.was_playing_before_seek = not self.is_paused
+        self._pause_playback()
 
-    # --------------- Frame update ----------------------
-    def _update_frame(self):
+    def _playback_seek_finished(self):
+        frame_index = self.playback_slider.value()
+        should_resume = self.was_playing_before_seek
+        self.was_playing_before_seek = False
+        self.segment_stop_time = None
+        self._seek_playback_frame(frame_index)
+        if should_resume:
+            self._begin_playback()
+
+    def _seek_playback_frame(self, frame_index):
+        """Seek video and both plots to a timeline-slider frame."""
+        if self.cap is None:
+            return
+        frame_count = max(1, int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)))
+        frame_index = max(0, min(int(frame_index), frame_count - 1))
+
+        self.timer.stop()
+        self._stop_audio()
+        self.is_paused = True
+        self.btn_play_pause.setText("Play")
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
         ret, frame = self.cap.read()
         if not ret:
-            self.timer.stop()
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            self.frame_idx = 0
-            self.is_paused = True
-            self.btn_play_pause.setText("Play")
             return
 
-        self.frame_idx += 1
-        current_time_sec = self.frame_idx / self.fps
+        self.frame_idx = frame_index
+        current_time_sec = frame_index / self.fps
+        self._render_frame_and_signals(frame, current_time_sec)
 
+    def play_label_segment(self, label_idx):
+        """Replay one selected 500-sample label window at the chosen speed."""
+        idx = self._indices_for_label(label_idx)
+        if len(idx) == 0:
+            return
+        start_time = float(self.emg_times[idx[0]])
+        end_time = float(self.emg_times[idx[-1]])
+        start_frame = int(round(start_time * self.fps))
+
+        self.segment_stop_time = None
+        self._seek_playback_frame(start_frame)
+        self.segment_stop_time = end_time
+        self._begin_playback()
+
+    def replay(self):
+        self.segment_stop_time = None
+        self._seek_playback_frame(0)
+        self._begin_playback()
+
+    def _render_frame_and_signals(self, frame, current_time_sec):
+        """Render one video frame and reveal plot data through the same time."""
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = frame_rgb.shape
         bytes_per_line = ch * w
@@ -1095,16 +1712,14 @@ class EMGVideoViewer(QWidget):
         self.video_label.setPixmap(QPixmap.fromImage(qimg))
 
         idx = np.searchsorted(self.emg_times, current_time_sec, side="right")
-
         if idx > 0:
-            t = self.emg_times[:idx]
-            y1 = self.emg_data[:idx, 0]
-            y2 = self.emg_data[:idx, 1]
-            y3 = self.emg_data[:idx, 2]
-
-            self.curve_ch1.setData(t, y1)
-            self.curve_ch2.setData(t, y2)
-            self.curve_ch3.setData(t, y3)
+            self.curve_ch1.setData(self.emg_times[:idx], self.emg_data[:idx, 0])
+            self.curve_ch2.setData(self.emg_times[:idx], self.emg_data[:idx, 1])
+            self.curve_ch3.setData(self.emg_times[:idx], self.emg_data[:idx, 2])
+        else:
+            self.curve_ch1.clear()
+            self.curve_ch2.clear()
+            self.curve_ch3.clear()
 
         audio_idx = np.searchsorted(self.audio_times, current_time_sec, side="right")
         if audio_idx > 0:
@@ -1112,6 +1727,80 @@ class EMGVideoViewer(QWidget):
                 self.audio_times[:audio_idx],
                 self.audio_data[:audio_idx],
             )
+        else:
+            self.curve_audio.clear()
+
+        slider_frame = int(round(current_time_sec * self.fps))
+        self.playback_slider.blockSignals(True)
+        self.playback_slider.setValue(slider_frame)
+        self.playback_slider.blockSignals(False)
+        shown_time = max(0.0, min(current_time_sec, self.playback_duration))
+        self.playback_time_label.setText(
+            f"{shown_time:.2f} / {self.playback_duration:.2f} s"
+        )
+
+    # --------------- Frame update ----------------------
+    def _update_frame(self):
+        if self.audio_master and self.audio_player.active():
+            current_time_sec = self.audio_player.position_s()
+        else:
+            elapsed = time.perf_counter() - self._play_t0
+            current_time_sec = self._play_t_origin + elapsed * self.PLAYBACK_SPEED
+
+        if (
+            self.segment_stop_time is not None
+            and current_time_sec >= self.segment_stop_time
+        ):
+            stop_time = self.segment_stop_time
+            self.segment_stop_time = None
+            self._seek_playback_frame(int(round(stop_time * self.fps)))
+            return
+
+        target_frame = max(0, int(current_time_sec * self.fps))
+        frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if frame_count > 0 and target_frame >= frame_count:
+            self.timer.stop()
+            self._stop_audio()
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            self.frame_idx = 0
+            self.is_paused = True
+            self.btn_play_pause.setText("Play")
+            self.segment_stop_time = None
+            self.playback_slider.setValue(0)
+            self.playback_time_label.setText(
+                f"0.00 / {self.playback_duration:.2f} s"
+            )
+            return
+
+        next_frame = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+        if abs(target_frame - next_frame) > 1:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+
+        ret, frame = self.cap.read()
+        if not ret:
+            self.timer.stop()
+            self._stop_audio()
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            self.frame_idx = 0
+            self.is_paused = True
+            self.btn_play_pause.setText("Play")
+            self.segment_stop_time = None
+            self.playback_slider.setValue(0)
+            self.playback_time_label.setText(
+                f"0.00 / {self.playback_duration:.2f} s"
+            )
+            return
+
+        self.frame_idx = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+        self._render_frame_and_signals(frame, current_time_sec)
+
+    def closeEvent(self, event):
+        self.timer.stop()
+        self._stop_audio()
+        if self.cap is not None:
+            self.cap.release()
+            self.cap = None
+        super().closeEvent(event)
 
 
 # ----------------------------- MAIN SCRIPT ----------------------------------
@@ -1127,35 +1816,9 @@ def main():
         print("Folder does not exist.")
         return
 
-    txt_files = glob.glob(os.path.join(folder, "trial*.txt"))
-
-    # accept both "video_*.avi"/"video*.avi" and "trial_*.avi"/"trial*.avi"
-    video_files = glob.glob(os.path.join(folder, "video*.avi")) \
-                  + glob.glob(os.path.join(folder, "trial*.avi"))
-
-    # accept both "audio_*.csv"/"audio*.csv" and "audio_*.wav"/"audio*.wav"
-    audio_files = glob.glob(os.path.join(folder, "audio*.csv")) \
-                  + glob.glob(os.path.join(folder, "audio*.wav"))
-
-    def extract_num_generic(path):
-        base = os.path.basename(path)
-        name, _ = os.path.splitext(base)
-
-        for prefix in ("trial_", "trial", "video_", "video", "audio_", "audio"):
-            if name.startswith(prefix):
-                suffix = name[len(prefix):]
-                if suffix.startswith("_"):
-                    suffix = suffix[1:]
-                if suffix.isdigit():
-                    return int(suffix)
-
-        raise ValueError(f"Unexpected filename format: {base}")
-
-    txt_nums = {extract_num_generic(p): p for p in txt_files}
-    vid_nums = {extract_num_generic(p): p for p in video_files}
-    audio_nums = {extract_num_generic(p): p for p in audio_files}
-
-    common_trials = sorted(set(txt_nums.keys()) & set(vid_nums.keys()) & set(audio_nums.keys()))
+    trials = find_trials_in_folder(folder)
+    trials_by_num = {trial["trial_num"]: trial for trial in trials}
+    common_trials = sorted(trials_by_num)
     if not common_trials:
         print("No matching trial_X.txt and video_X.avi found.")
         return
@@ -1172,9 +1835,10 @@ def main():
         else:
             break
 
-    emg_path = txt_nums[n]
-    video_path = vid_nums[n]
-    audio_path = audio_nums[n]
+    selected_trial = trials_by_num[n]
+    emg_path = selected_trial["emg_path"]
+    video_path = selected_trial["video_path"]
+    audio_path = selected_trial["audio_path"]
     print(f"Using EMG file:   {emg_path}")
     print(f"Using VIDEO file: {video_path}")
     print(f"Using AUDIO file: {audio_path}")
@@ -1184,9 +1848,18 @@ def main():
 
     # Run Qt app
     app = QApplication(sys.argv)
-    viewer = EMGVideoViewer(video_path, emg_times, emg_data, button_data, emg_path)
+    viewer = EMGVideoViewer(
+        video_path,
+        emg_times,
+        emg_data,
+        button_data,
+        emg_path,
+        audio_path=audio_path,
+        available_trials=trials,
+        current_trial_index=trials.index(selected_trial),
+    )
     viewer.setWindowTitle(f"Trial {n} - EMG + Video")
-    viewer.resize(900, 750)
+    viewer.resize(1100, 950)
     viewer.show()
     sys.exit(app.exec_())
 
