@@ -14,7 +14,7 @@ from datetime import datetime
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QVBoxLayout,
     QPushButton, QHBoxLayout, QInputDialog, QSlider,
-    QScrollArea, QFrame, QSizePolicy, QMessageBox, QComboBox
+    QScrollArea, QFrame, QSizePolicy, QMessageBox, QComboBox, QFileDialog
 )
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import QTimer, Qt
@@ -1806,34 +1806,56 @@ class EMGVideoViewer(QWidget):
 # ----------------------------- MAIN SCRIPT ----------------------------------
 
 def main():
-    # Ask for folder path
-    folder = input("Enter path to folder (e.g. ...\\finalemg\\set1\\act1): ").strip()
+    app = QApplication.instance() or QApplication(sys.argv)
+    trial_logs = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "FirstPhase", "trial_logs")
+    )
+    initial_folder = trial_logs if os.path.isdir(trial_logs) else os.path.dirname(__file__)
 
-    if not folder:
-        print("No folder given.")
-        return
-    if not os.path.isdir(folder):
-        print("Folder does not exist.")
-        return
-
-    trials = find_trials_in_folder(folder)
-    trials_by_num = {trial["trial_num"]: trial for trial in trials}
-    common_trials = sorted(trials_by_num)
-    if not common_trials:
-        print("No matching trial_X.txt and video_X.avi found.")
-        return
-
-    print("Available trials:", common_trials)
     while True:
-        try:
-            n = int(input("Which trial number do you want to view? "))
-        except ValueError:
-            print("Please enter a valid integer.")
-            continue
-        if n not in common_trials:
-            print("That trial does not exist. Choose one of:", common_trials)
-        else:
+        folder = QFileDialog.getExistingDirectory(
+            None,
+            "Select a Trial Session Folder",
+            initial_folder,
+            QFileDialog.ShowDirsOnly,
+        )
+        if not folder:
+            return
+
+        trials = find_trials_in_folder(folder)
+        trials_by_num = {trial["trial_num"]: trial for trial in trials}
+        common_trials = sorted(trials_by_num)
+        if common_trials:
             break
+
+        QMessageBox.warning(
+            None,
+            "No Trials Found",
+            "That folder does not contain matching trial files and videos.\n\n"
+            "Choose a session folder inside FirstPhase\\trial_logs.",
+        )
+        initial_folder = folder
+
+    completed = set(completed_result_trial_numbers(folder))
+    trial_choices = [
+        f"Trial {trial_num} ({'finished' if trial_num in completed else 'not labeled'})"
+        for trial_num in common_trials
+    ]
+    first_unfinished = next(
+        (index for index, trial_num in enumerate(common_trials) if trial_num not in completed),
+        0,
+    )
+    choice, ok = QInputDialog.getItem(
+        None,
+        "Select Starting Trial",
+        "Choose the trial to open:",
+        trial_choices,
+        first_unfinished,
+        False,
+    )
+    if not ok:
+        return
+    n = common_trials[trial_choices.index(choice)]
 
     selected_trial = trials_by_num[n]
     emg_path = selected_trial["emg_path"]
@@ -1846,8 +1868,6 @@ def main():
     # Load EMG data
     emg_times, emg_data, button_data = load_emg_file(emg_path)
 
-    # Run Qt app
-    app = QApplication(sys.argv)
     viewer = EMGVideoViewer(
         video_path,
         emg_times,
