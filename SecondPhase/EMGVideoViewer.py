@@ -165,6 +165,7 @@ def compute_next_destination_for_root(result_root, num_acts=2):
     act_idx = (total_clips % num_acts) + 1
     trial_idx = (total_clips // num_acts) + 1
     return act_idx, trial_idx
+
 def select_startup_trial_index(trials, num_acts=2):
     """
     Pick the raw trial whose number matches the next ResultClip destination.
@@ -652,21 +653,8 @@ class EMGVideoViewer(QWidget):
 
         audio_pen = pg.mkPen((255, 220, 0), width=2)
         self.curve_audio = pg.PlotCurveItem(pen=audio_pen, name="audio")
-        
-        # Uncomment this line to show the audio signal over the EMG graph.
-        # self.audio_view.addItem(self.curve_audio)
-
-    def _setup_audio_overlay(self):
-        self.audio_view = pg.ViewBox()
-        self.plot_widget.showAxis("right")
-        self.plot_widget.scene().addItem(self.audio_view)
-        self.plot_widget.getAxis("right").linkToView(self.audio_view)
-        self.plot_widget.getAxis("right").setLabel("Audio amp")
-        self.audio_view.setXLink(self.plot_widget)
-
-        audio_pen = pg.mkPen((255, 220, 0), width=2)
-        self.curve_audio = pg.PlotCurveItem(pen=audio_pen, name="audio")
-        self.audio_view.addItem(self.curve_audio)
+        #uncomment this line to add audio overlay
+        #self.audio_view.addItem(self.curve_audio)
 
         self.plot_widget.getViewBox().sigResized.connect(self._sync_audio_view)
         self._sync_audio_view()

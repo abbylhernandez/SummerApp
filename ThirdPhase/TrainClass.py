@@ -8,13 +8,20 @@ import random
 import re
 from collections import defaultdict
 
+if __package__:
+    from .LDA_Analysis import AnalysisMethods
+else:
+    # Support running TrainClass.py directly from the ThirdPhase directory.
+    from LDA_Analysis import AnalysisMethods
+
+
 # -------------------------------------------------
 #  LOGGER SETUP (module-level)
 # -------------------------------------------------
 logger = logging.getLogger(__name__)
 
 
-class trainclass:
+class trainclass(AnalysisMethods):
     def __init__(self):
         # Create Report File
         with open("ReportM.txt", "w") as f:
@@ -1874,7 +1881,7 @@ class trainclass:
 
 if __name__ == "__main__":
     train_obj = trainclass()
-    root_tabledata = r"C:\Users\milto\OneDrive\Desktop\Star Program\ResearchCode\SummerApp\FirstPhase\trial_logs\Subject3Data-2026-07-23 02-30-21 PM"
+    root_tabledata = r"/Users/abbyhernandez/Desktop/NEES/SummerApp/FirstPhase/trial_logs/Validation4Data-2026-07-28 10-07-28 AM"
 
     for prune in range(1, 15):  # 1..14
         print(f"\n\n=== Running prune_trials={prune} ===\n")
