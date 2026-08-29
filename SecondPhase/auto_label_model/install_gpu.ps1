@@ -1,12 +1,13 @@
 param(
-    [string]$TorchVersion = "2.13.0+cu130"
+    [string]$TorchVersion = "2.13.0+cu130",
+    [string]$TorchvisionVersion = "0.28.0+cu130"
 )
 
 $ErrorActionPreference = "Stop"
 $packageDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $pythonPath = (Resolve-Path (Join-Path $packageDir "..\..\.venv\Scripts\python.exe")).Path
 
-& $pythonPath -m pip install "torch==$TorchVersion" --index-url https://download.pytorch.org/whl/cu130
+& $pythonPath -m pip install "torch==$TorchVersion" "torchvision==$TorchvisionVersion" --index-url https://download.pytorch.org/whl/cu130
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }

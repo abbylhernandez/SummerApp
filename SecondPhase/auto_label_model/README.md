@@ -10,12 +10,12 @@ held-out test metrics are acceptable.
 
 ## Audited data available now
 
-- 110 paired trials have full raw EMG plus exact Act 1 and Act 2 start indices.
+- 157 paired trials have full raw EMG plus exact Act 1 and Act 2 start indices.
 - 16 additional external pairs are clip-only and are used for Act encoder
   pretraining, not raw-trial localization.
-- 126 unique paired trials produce 252 canonical 500-sample clips.
-- `testdata` and `mikulvalidationcheckData...` contain 51 exact duplicate raw
-  trials. The builder groups/excludes them so copies cannot cross splits.
+- 173 unique paired trials produce 346 canonical 500-sample clips.
+- The current audit finds no exact raw duplicates, near-duplicate warnings, or
+  clip overlap between splits.
 - Saved 200-1000 sample variants are derivatives of their parent trial. They
   are not counted as independent examples and never cross dataset splits.
 
@@ -88,9 +88,11 @@ Or run:
 `--rescan` is the retraining switch: newly completed Phase 2 labels are audited
 and added before training. Use `--quick` for a one-epoch smoke test.
 
-The default group-safe split currently contains 60 training, 25 validation,
-and 25 held-out localization trials. Subject/session families and exact copies
-stay together. The final checkpoint is:
+The default group-safe split currently contains 107 training, 25 validation,
+and 25 held-out localization trials. `subject2` remains the validation group,
+`validation2_primary` remains the test group, and all other complete sessions
+train the model. Subject/session families and exact copies stay together. The
+final checkpoint is:
 
 ```text
 artifacts/checkpoints/auto_label_model.pt
@@ -138,3 +140,47 @@ Train V2 on the GPU:
 
 Its separate checkpoint is
 `artifacts/checkpoints/auto_label_model_v2.pt`. V1 is not overwritten.
+
+## V3 U-Time experiment
+
+V3 is isolated in `features_v3.py`, `model_v3_utime.py`, `train_v3.py`, and
+`predict_v3.py`. It follows a compact U-Time/1D U-Net design for complete
+physiological time series. Inputs include high-pass EMG, a short RMS envelope,
+and first differences. The network predicts dense background/Act regions and
+two boundary distributions without a fixed trial-position prior.
+
+V3 reports two separate protocols:
+
+- **Zero-shot:** an entire unseen collection session is evaluated with no
+  labels from that session.
+- **Rapid calibration:** five trials from an unseen session tune only a small
+  session adapter and the output heads; the remaining trials are evaluated.
+
+Run the full GPU experiment with:
+
+```powershell
+.\auto_label_model\retrain_v3.ps1 -Device cuda
+```
+
+The base and session-calibrated checkpoints are separate from V1 and V2 under
+`artifacts/checkpoints/`.
+
+## V4 pretrained Video + EMG experiment
+
+V4 uses the synchronized external-camera videos as the primary modality and
+EMG as secondary evidence. `cache_video_features.py` extracts one pretrained
+MobileNetV3 embedding per native 30 FPS frame. `model_v4_multimodal.py` fuses
+centered appearance, frame-to-frame visual motion, and frame-aligned EMG with
+a bidirectional temporal model. The cached embeddings are ignored by Git and
+reused by subsequent training runs.
+
+Run the repeatable pipeline with:
+
+```powershell
+.\auto_label_model\retrain_v4.ps1 -Device cuda
+```
+
+One held-out recording whose EMG and video durations differ by more than one
+second is excluded and reported in `training_metrics_v4.json`. V4 saves a
+separate `auto_label_model_v4_video_emg.pt` checkpoint and is not connected to
+the manual viewer unless it passes the integration gate.

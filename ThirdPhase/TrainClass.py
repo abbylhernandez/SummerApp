@@ -1347,7 +1347,8 @@ class trainclass:
             - choose the 'prune_trials' worst trials per label (act1, act2, ...)
 
         2) Create a fresh copy of the original set under:
-                root_folder / f"prune_<prune_trials>" / ResultClipSizeUpXXXX
+                root_folder / "Clips" / f"prune_<prune_trials>" /
+                ResultClipSizeUpXXXX
             and REMOVE those worst trials (actX/trial_YY.txt) from the copy only.
 
         3) On the PRUNED copy:
@@ -1359,14 +1360,27 @@ class trainclass:
 
         Notes
         -----
-        * The ORIGINAL datasets under root_folder are never modified
+        * The ORIGINAL datasets under root_folder / "Clips" are never modified
         (only Train/Test folders are recreated, as usual).
         * Each prune_trials value gets its own subfolder:
-            root_folder / f"prune_<prune_trials>"
+            root_folder / "Clips" / f"prune_<prune_trials>"
+        * Older sessions with ResultClipSizeUp* folders directly under
+          root_folder are still supported.
         """
         root = Path(root_folder)
         if not root.exists():
             raise FileNotFoundError(f"{root} does not exist")
+
+        # EMGVideoViewer stores all generated clips under a dedicated Clips
+        # folder. Accept either the session folder or the Clips folder itself,
+        # while retaining support for datasets made with the older flat layout.
+        nested_clips_root = root / "Clips"
+        if root.name.lower() == "clips":
+            dataset_root = root
+        elif nested_clips_root.is_dir():
+            dataset_root = nested_clips_root
+        else:
+            dataset_root = root
 
         # ---------- helper to read size from "ResultClipSizeUpXXXX" ----------
         def size_key(p: Path) -> int:
@@ -1426,14 +1440,15 @@ class trainclass:
 
         # All ResultClipSizeUp* sets, but keep only <= max_sample_size
         dataset_dirs = [
-            d for d in root.iterdir()
+            d for d in dataset_root.iterdir()
             if d.is_dir()
             and d.name.lower().startswith("resultclipsizeup")
             and size_key(d) <= max_sample_size
         ]
         if not dataset_dirs:
             raise FileNotFoundError(
-                f"No 'ResultClipSizeUp*' folders with size <= {max_sample_size} found in {root}"
+                f"No 'ResultClipSizeUp*' folders with size <= {max_sample_size} "
+                f"found in {dataset_root}"
             )
 
         dataset_dirs.sort(key=size_key)
@@ -1447,7 +1462,7 @@ class trainclass:
         per_action_results = []
 
         # ---------- set up prune root + report path ----------
-        prune_root = root / f"prune_{prune_trials}"
+        prune_root = dataset_root / f"prune_{prune_trials}"
         prune_root.mkdir(exist_ok=True)
 
         if accuracy_report_name is None:
@@ -1474,7 +1489,8 @@ class trainclass:
         wr("============================================================")
         wr(f"PRUNE REPORT  (Train {percentage}% / Test {100-percentage}%)")
         wr(f"Prune trials per label   : {prune_trials}")
-        wr(f"Root folder (original)   : {root}")
+        wr(f"Session/root input       : {root}")
+        wr(f"Clip datasets folder     : {dataset_root}")
         wr(f"Prune root (output sets) : {prune_root}")
         wr(f"Only sample sizes <= {max_sample_size} are used.")
         wr("============================================================")
@@ -1874,7 +1890,7 @@ class trainclass:
 
 if __name__ == "__main__":
     train_obj = trainclass()
-    root_tabledata = r"C:\Users\milto\OneDrive\Desktop\Star Program\ResearchCode\SummerApp\FirstPhase\trial_logs\Subject3Data-2026-07-23 02-30-21 PM"
+    root_tabledata = r"C:\Users\milto\OneDrive\Desktop\Star Program\ResearchCode\SummerApp\FirstPhase\trial_logs\Addy_Realtime_8-28Data-2026-08-28 04-06-36 PM"
 
     for prune in range(1, 15):  # 1..14
         print(f"\n\n=== Running prune_trials={prune} ===\n")

@@ -34,6 +34,7 @@ except Exception:
     FFMPEG_OK = False
 
 AUDIO_OK = SOUNDDEVICE_OK and FFMPEG_OK
+CLIPS_FOLDER_NAME = "Clips"
 
 
 class _AudioStreamPlayer:
@@ -172,9 +173,14 @@ def compute_next_destination_for_root(result_root, num_acts=2):
         trial_idx += 1
 
 
+def clip_output_root(session_folder, root_name="ResultClip"):
+    """Return a clip-output path kept separate from the raw trial files."""
+    return os.path.join(session_folder, CLIPS_FOLDER_NAME, root_name)
+
+
 def completed_result_trial_numbers(session_folder, num_acts=2):
     """Return trial numbers that have a saved output for every act label."""
-    result_root = os.path.join(session_folder, "ResultClip")
+    result_root = clip_output_root(session_folder)
     completed_by_act = []
     for act_idx in range(1, num_acts + 1):
         numbers = set()
@@ -202,7 +208,7 @@ def select_startup_trial_index(trials, num_acts=2):
             folders.append(trial["folder"])
 
     for folder in folders:
-        result_root = os.path.join(folder, "ResultClip")
+        result_root = clip_output_root(folder)
         _, destination_trial_idx = compute_next_destination_for_root(result_root, num_acts)
 
         for index, trial in enumerate(trials):
@@ -1006,10 +1012,10 @@ class EMGVideoViewer(QWidget):
 
     def _compute_next_destination(self):
         """
-        Backwards-compatible helper for the original ResultClip folder.
+        Return the next destination in the primary ResultClip folder.
         """
         base_dir = os.path.dirname(self.emg_path)
-        result_root = os.path.join(base_dir, "ResultClip")
+        result_root = clip_output_root(base_dir)
         return self._compute_next_destination_for_root(result_root)
 
     def _update_next_dest_label(self):
@@ -1059,7 +1065,7 @@ class EMGVideoViewer(QWidget):
         )
 
         base_dir = os.path.dirname(self.emg_path)
-        result_root = os.path.join(base_dir, "ResultClip")
+        result_root = clip_output_root(base_dir)
         act_paths = {
             act_idx: os.path.join(
                 result_root,
@@ -1217,7 +1223,7 @@ class EMGVideoViewer(QWidget):
             raise ValueError("overwrite requires an explicit destination")
 
         base_dir = os.path.dirname(self.emg_path)
-        result_root = os.path.join(base_dir, root_name)
+        result_root = clip_output_root(base_dir, root_name)
 
         times_clip_abs = self.emg_times[idx].copy()
         emg_clip = self.emg_data[idx, :].copy()

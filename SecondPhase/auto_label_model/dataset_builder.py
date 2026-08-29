@@ -332,6 +332,22 @@ def assign_group_splits(records: list[dict]) -> dict[str, str]:
         row["source_group"] for row in records
         if row["source_type"] == "local_full_trial"
     )
+    # These two independent collection groups remain fixed evaluation sets.
+    # All other complete sessions, including newly labeled sessions, train the
+    # model. This keeps sessions group-safe and avoids moving the newest large
+    # session into the test split merely because its file count increased.
+    fixed_evaluation = {
+        "subject2": "validation",
+        "validation2_primary": "test",
+    }
+    if all(group in counts for group in fixed_evaluation):
+        assignment = {
+            group: fixed_evaluation.get(group, "train") for group in counts
+        }
+        for row in records:
+            assignment.setdefault(row["source_group"], "train")
+        return assignment
+
     ordered = sorted(counts, key=lambda group: (-counts[group], group))
     assignment: dict[str, str] = {}
     if ordered:
@@ -501,7 +517,8 @@ def build_dataset(trial_logs: Path, external_root: Path, output_dir: Path) -> di
         "external_inventory": external_audit,
         "notes": [
             "Resampled variants are derivatives and are never independent split units.",
-            "testdata and mikulvalidationcheckData raw trials are exact duplicates.",
+            "Exact raw and clip hashes are audited before every training run.",
+            "Collection sessions never cross train, validation, and test splits.",
             "Only canonical 500-sample Act clips are copied into combined_clips.",
             "Clip-only external pairs can pretrain Act classification but cannot supervise raw-trial localization.",
         ],
