@@ -587,6 +587,11 @@ class EMGVideoViewer(QWidget):
         # Video label
         self.video_label = QLabel("Video")
         self.video_label.setAlignment(Qt.AlignCenter)
+        # The source videos can be much larger than a laptop display.  An
+        # expanding/ignored label prevents the native pixmap size from making
+        # the whole window taller than the available screen.
+        self.video_label.setMinimumSize(0, 0)
+        self.video_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         layout.addWidget(self.video_label)
 
         # EMG plot
@@ -597,6 +602,8 @@ class EMGVideoViewer(QWidget):
         self.plot_widget.setMouseEnabled(x=False, y=False)
         self.plot_widget.setMenuEnabled(False)
         layout.addWidget(self.plot_widget)
+        layout.setStretch(1, 3)  # video
+        layout.setStretch(2, 2)  # EMG plot
 
         # Three curves for channels
         self.curve_ch1 = self.plot_widget.plot(pen='r', name="ch1")
@@ -1715,7 +1722,14 @@ class EMGVideoViewer(QWidget):
         h, w, ch = frame_rgb.shape
         bytes_per_line = ch * w
         qimg = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
-        self.video_label.setPixmap(QPixmap.fromImage(qimg))
+        self._video_pixmap = QPixmap.fromImage(qimg)
+        self.video_label.setPixmap(
+            self._video_pixmap.scaled(
+                self.video_label.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation,
+            )
+        )
 
         idx = np.searchsorted(self.emg_times, current_time_sec, side="right")
         if idx > 0:
@@ -1808,6 +1822,19 @@ class EMGVideoViewer(QWidget):
             self.cap = None
         super().closeEvent(event)
 
+    def resizeEvent(self, event):
+        """Keep the displayed video inside the resized window."""
+        super().resizeEvent(event)
+        pixmap = getattr(self, "_video_pixmap", None)
+        if pixmap is not None and not pixmap.isNull():
+            self.video_label.setPixmap(
+                pixmap.scaled(
+                    self.video_label.size(),
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+            )
+
 
 # ----------------------------- MAIN SCRIPT ----------------------------------
 
@@ -1885,7 +1912,12 @@ def main():
         current_trial_index=trials.index(selected_trial),
     )
     viewer.setWindowTitle(f"Trial {n} - EMG + Video")
-    viewer.resize(1100, 950)
+    # Start at a useful size without extending below the macOS menu bar or
+    # Dock.  The window remains freely resizable after this.
+    available = app.primaryScreen().availableGeometry()
+    initial_width = min(1100, max(640, available.width() - 40))
+    initial_height = min(950, max(560, available.height() - 40))
+    viewer.resize(initial_width, initial_height)
     viewer.show()
     sys.exit(app.exec_())
 
