@@ -561,6 +561,45 @@ class trainclass:
             for line in summary_lines:
                 self.add_report(line)
 
+    def set_training_testing_folders(self, training_folder, testing_folder):
+        """Use two existing datasets directly, without creating a split."""
+        training_folder = Path(training_folder)
+        testing_folder = Path(testing_folder)
+
+        action_sets = {}
+        for label, folder in (
+            ("Training", training_folder),
+            ("Testing", testing_folder),
+        ):
+            if not folder.is_dir():
+                raise FileNotFoundError(f"{label} folder does not exist: {folder}")
+
+            action_sets[label] = {
+                child.name
+                for child in folder.iterdir()
+                if child.is_dir() and child.name.lower().startswith("act")
+            }
+            if not action_sets[label]:
+                raise FileNotFoundError(
+                    f"No act* folders found in {label.lower()} folder: {folder}"
+                )
+
+        if action_sets["Training"] != action_sets["Testing"]:
+            raise ValueError(
+                "Training and testing folders must contain the same action folders. "
+                f"Training has {sorted(action_sets['Training'])}; "
+                f"testing has {sorted(action_sets['Testing'])}."
+            )
+
+        self.data_set_location = training_folder
+        self.train_folder = training_folder
+        self.testing_folder = testing_folder
+
+        self.add_report("")
+        self.add_report("Using separate training and testing datasets:")
+        self.add_report(f"  Training: {training_folder}")
+        self.add_report(f"  Testing:  {testing_folder}")
+
 
     def save_feature_matrix(self, num_rows: int, filename: str):
         """
@@ -1327,10 +1366,9 @@ class trainclass:
 
     def multipletrain_prune(
         self,
-        root_folder,
+        training_root_folder,
+        testing_root_folder,
         prune_trials=1,
-        split_type="alternate",
-        percentage=60,
         accuracy_report_name=None,
         make_plot=True,
         max_sample_size=1100,
@@ -1340,19 +1378,20 @@ class trainclass:
 
         Steps for each ResultClipSizeUpXXXX set:
 
-        1) On the ORIGINAL set:
-            - split Train/Test, train LDA, test LDA
+        1) On the ORIGINAL training set:
+            - train LDA using every trial in the training path
+            - test LDA using every trial in the separate testing path
             - record baseline train/test accuracy
             - compute per-trial accuracy on TRAIN windows
             - choose the 'prune_trials' worst trials per label (act1, act2, ...)
 
         2) Create a fresh copy of the original set under:
-                root_folder / "Clips" / f"prune_<prune_trials>" /
+                training_root_folder / "Clips" / f"prune_<prune_trials>" /
                 ResultClipSizeUpXXXX
             and REMOVE those worst trials (actX/trial_YY.txt) from the copy only.
 
-        3) On the PRUNED copy:
-            - split Train/Test again, train LDA, test LDA
+        3) On the PRUNED training copy:
+            - train LDA again and evaluate against the same testing set
             - record pruned train/test accuracy
 
         4) Save a text report + a plot of Test(original) vs Test(pruned)
@@ -1360,27 +1399,28 @@ class trainclass:
 
         Notes
         -----
-        * The ORIGINAL datasets under root_folder / "Clips" are never modified
-        (only Train/Test folders are recreated, as usual).
+        * The original training and testing datasets are never modified.
+        * No percentage-based Train/Test folders are created.
         * Each prune_trials value gets its own subfolder:
-            root_folder / "Clips" / f"prune_<prune_trials>"
-        * Older sessions with ResultClipSizeUp* folders directly under
-          root_folder are still supported.
+            training_root_folder / "Clips" / f"prune_<prune_trials>"
+        * Paths with ResultClipSizeUp* folders directly under them are also
+          supported; a nested Clips folder is optional.
         """
-        root = Path(root_folder)
-        if not root.exists():
-            raise FileNotFoundError(f"{root} does not exist")
+        training_root = Path(training_root_folder)
+        testing_root = Path(testing_root_folder)
 
-        # EMGVideoViewer stores all generated clips under a dedicated Clips
-        # folder. Accept either the session folder or the Clips folder itself,
-        # while retaining support for datasets made with the older flat layout.
-        nested_clips_root = root / "Clips"
-        if root.name.lower() == "clips":
-            dataset_root = root
-        elif nested_clips_root.is_dir():
-            dataset_root = nested_clips_root
-        else:
-            dataset_root = root
+        def clips_root(root: Path, label: str) -> Path:
+            if not root.exists():
+                raise FileNotFoundError(f"{label} path does not exist: {root}")
+            nested = root / "Clips"
+            if root.name.lower() == "clips":
+                return root
+            if nested.is_dir():
+                return nested
+            return root
+
+        training_dataset_root = clips_root(training_root, "Training")
+        testing_dataset_root = clips_root(testing_root, "Testing")
 
         # ---------- helper to read size from "ResultClipSizeUpXXXX" ----------
         def size_key(p: Path) -> int:
@@ -1439,19 +1479,37 @@ class trainclass:
             return summary
 
         # All ResultClipSizeUp* sets, but keep only <= max_sample_size
-        dataset_dirs = [
-            d for d in dataset_root.iterdir()
+        training_dataset_dirs = [
+            d for d in training_dataset_root.iterdir()
             if d.is_dir()
             and d.name.lower().startswith("resultclipsizeup")
             and size_key(d) <= max_sample_size
         ]
-        if not dataset_dirs:
+        if not training_dataset_dirs:
             raise FileNotFoundError(
                 f"No 'ResultClipSizeUp*' folders with size <= {max_sample_size} "
-                f"found in {dataset_root}"
+                f"found in training path {training_dataset_root}"
             )
 
-        dataset_dirs.sort(key=size_key)
+        testing_datasets_by_size = {
+            size_key(d): d
+            for d in testing_dataset_root.iterdir()
+            if d.is_dir()
+            and d.name.lower().startswith("resultclipsizeup")
+            and size_key(d) <= max_sample_size
+        }
+        missing_test_sizes = sorted(
+            size_key(d)
+            for d in training_dataset_dirs
+            if size_key(d) not in testing_datasets_by_size
+        )
+        if missing_test_sizes:
+            raise FileNotFoundError(
+                "The testing path is missing ResultClipSizeUp folders for sample "
+                f"sizes: {missing_test_sizes}"
+            )
+
+        training_dataset_dirs.sort(key=size_key)
 
         # ---------- outputs we will fill ----------
         sample_sizes = []
@@ -1462,11 +1520,11 @@ class trainclass:
         per_action_results = []
 
         # ---------- set up prune root + report path ----------
-        prune_root = dataset_root / f"prune_{prune_trials}"
+        prune_root = training_dataset_root / f"prune_{prune_trials}"
         prune_root.mkdir(exist_ok=True)
 
         if accuracy_report_name is None:
-            accuracy_report_name = f"AccuracyReport_Train{percentage}_Prune{prune_trials}.txt"
+            accuracy_report_name = f"AccuracyReport_SeparateSets_Prune{prune_trials}.txt"
 
         acc_report_path = prune_root / accuracy_report_name
         if acc_report_path.exists():
@@ -1487,10 +1545,12 @@ class trainclass:
                 f.write(str(line) + "\n")
 
         wr("============================================================")
-        wr(f"PRUNE REPORT  (Train {percentage}% / Test {100-percentage}%)")
+        wr("PRUNE REPORT (separate training and testing paths)")
         wr(f"Prune trials per label   : {prune_trials}")
-        wr(f"Session/root input       : {root}")
-        wr(f"Clip datasets folder     : {dataset_root}")
+        wr(f"Training path            : {training_root}")
+        wr(f"Training clips folder    : {training_dataset_root}")
+        wr(f"Testing path             : {testing_root}")
+        wr(f"Testing clips folder     : {testing_dataset_root}")
         wr(f"Prune root (output sets) : {prune_root}")
         wr(f"Only sample sizes <= {max_sample_size} are used.")
         wr("============================================================")
@@ -1499,7 +1559,7 @@ class trainclass:
 
         wr_action("============================================================")
         wr_action(
-            f"PER-ACTION ACCURACY  (Train {percentage}% / Test {100-percentage}%)"
+            "PER-ACTION ACCURACY (separate training and testing paths)"
         )
         wr_action("act1 is displayed as Hold; act2 is displayed as Release.")
         wr_action("Accuracy is measured across windows belonging only to that action.")
@@ -1513,8 +1573,9 @@ class trainclass:
         # ==========================================================
         # LOOP OVER EACH SAMPLE-SIZE DATASET (<= max_sample_size)
         # ==========================================================
-        for ds in dataset_dirs:
+        for ds in training_dataset_dirs:
             size = size_key(ds)
+            testing_ds = testing_datasets_by_size[size]
             sample_sizes.append(size)
 
             # ------------------------------------------------------
@@ -1525,8 +1586,7 @@ class trainclass:
             self.add_report(f"### BASELINE DATASET: {ds.name}  ({ds})")
             self.add_report("################################################")
 
-            self.data_set_location = ds
-            self.split_training_testing(type=split_type, percentage=percentage)
+            self.set_training_testing_folders(ds, testing_ds)
             self.set_data_info()
             self.train_model()
             base_test = self.test_model()
@@ -1555,14 +1615,13 @@ class trainclass:
             # ============================
             # SAVE BASELINE WEIGHTS
             # ============================
-            base_c_out = ds / f"LDA_BASE_size{size}_Train{percentage}_{split_type}.c"
+            base_c_out = ds / f"LDA_BASE_size{size}_SeparateSets.c"
             base_meta = {
                 "mode": "multipletrain_prune:baseline",
-                "dataset": str(ds),
+                "training_dataset": str(ds),
+                "testing_dataset": str(testing_ds),
                 "sample_size": size,
-                "split_type": split_type,
-                "train_percent": percentage,
-                "test_percent": 100 - percentage,
+                "dataset_mode": "separate_paths",
                 "train_accuracy": f"{base_train_pct:.2f}%",
                 "test_accuracy": f"{base_test_pct:.2f}%",
                 "prune_trials_per_label": prune_trials,
@@ -1599,7 +1658,7 @@ class trainclass:
             # --- snapshot totals BEFORE deletion (for correct percentages) ---
             predelete_total_by_label_obj = {}
             for label_name in worst_by_label.keys():
-                label_train_folder = adjusted_ds / "Train" / label_name
+                label_train_folder = adjusted_ds / label_name
                 total_by_obj = defaultdict(int)
 
                 if label_train_folder.exists():
@@ -1618,7 +1677,7 @@ class trainclass:
             for label_name, trial_list in worst_by_label.items():
                 for trial_key in trial_list:
                     rel = Path(trial_key)  # e.g. "act1/trial_03.txt"
-                    raw_file = adjusted_ds / "Train" / rel
+                    raw_file = adjusted_ds / rel
 
                     if raw_file.exists():
                         raw_file.unlink()
@@ -1635,9 +1694,9 @@ class trainclass:
             wr("# Object-level cut summary (1-10=obj1, 11-20=obj2, ...):")
 
             for label_name, removed_relpaths in removed_by_label.items():
-                label_train_folder = adjusted_ds / "Train" / label_name
+                label_train_folder = adjusted_ds / label_name
                 if not label_train_folder.exists():
-                    msg = f"#   {label_name}: (Train folder not found: {label_train_folder})"
+                    msg = f"#   {label_name}: (action folder not found: {label_train_folder})"
                     self.add_report(msg)
                     wr(msg)
                     continue
@@ -1663,16 +1722,14 @@ class trainclass:
                     wr("# " + line)
 
             # ------------------------------------------------------
-            # 4) Train & test on PRUNED COPY (reuse copied Train/Test)
+            # 4) Train on PRUNED COPY and reuse the separate testing dataset
             # ------------------------------------------------------
             self.add_report("")
             self.add_report("################################################")
             self.add_report(f"###  PRUNED DATASET (copy): {adjusted_ds.name}  ({adjusted_ds})")
             self.add_report("################################################")
 
-            self.data_set_location = adjusted_ds
-            self.train_folder = adjusted_ds / "Train"
-            self.testing_folder = adjusted_ds / "Test"
+            self.set_training_testing_folders(adjusted_ds, testing_ds)
 
             self.set_data_info()
             self.train_model()
@@ -1703,16 +1760,15 @@ class trainclass:
             # SAVE PRUNED WEIGHTS
             # ============================
             pruned_c_out = adjusted_ds / (
-                f"LDA_PRUNED_size{size}_Train{percentage}_{split_type}_Prune{prune_trials}.c"
+                f"LDA_PRUNED_size{size}_SeparateSets_Prune{prune_trials}.c"
             )
             pruned_meta = {
                 "mode": "multipletrain_prune:pruned",
-                "dataset": str(adjusted_ds),
-                "source_dataset": str(ds),
+                "training_dataset": str(adjusted_ds),
+                "source_training_dataset": str(ds),
+                "testing_dataset": str(testing_ds),
                 "sample_size": size,
-                "split_type": split_type,
-                "train_percent": percentage,
-                "test_percent": 100 - percentage,
+                "dataset_mode": "separate_paths",
                 "train_accuracy": f"{pruned_train_pct:.2f}%",
                 "test_accuracy": f"{pruned_test_pct:.2f}%",
                 "prune_trials_per_label": prune_trials,
@@ -1798,13 +1854,15 @@ class trainclass:
             plt.xlabel("Sample Size")
             plt.ylabel("Accuracy (%)")
             plt.title(
-                f"Accuracy vs. Sample Size (Train {percentage}% / Test {100 - percentage}%, prune={prune_trials})"
+                f"Accuracy vs. Sample Size (separate datasets, prune={prune_trials})"
             )
             plt.grid(True, linestyle="--", alpha=0.5)
             plt.legend()
             plt.tight_layout()
 
-            plot_path = prune_root / f"Accuracy_vs_SampleSize_Train{percentage}_Prune{prune_trials}.png"
+            plot_path = prune_root / (
+                f"Accuracy_vs_SampleSize_SeparateSets_Prune{prune_trials}.png"
+            )
             plt.savefig(plot_path, dpi=150)
             plt.close()
 
@@ -1869,14 +1927,13 @@ class trainclass:
                 axes[-1][0].set_xlabel("Sample Size")
                 fig.suptitle(
                     f"Per-Action Accuracy vs. Sample Size "
-                    f"(Train {percentage}% / Test {100-percentage}%, "
-                    f"prune={prune_trials})"
+                    f"(separate datasets, prune={prune_trials})"
                 )
                 fig.tight_layout()
 
                 per_action_plot_path = prune_root / (
-                    f"Accuracy_PerAction_vs_SampleSize_Train{percentage}"
-                    f"_Prune{prune_trials}.png"
+                    f"Accuracy_PerAction_vs_SampleSize_SeparateSets_"
+                    f"Prune{prune_trials}.png"
                 )
                 fig.savefig(per_action_plot_path, dpi=150)
                 plt.close(fig)
@@ -1890,16 +1947,19 @@ class trainclass:
 
 if __name__ == "__main__":
     train_obj = trainclass()
-    root_tabledata = r"C:\Users\milto\OneDrive\Desktop\Star Program\ResearchCode\SummerApp\FirstPhase\trial_logs\Addy_Realtime_8-28Data-2026-08-28 04-06-36 PM"
+
+    # Paste the two log-folder paths here. Each value may point either to the
+    # session folder containing Clips/ or directly to its Clips/ folder.
+    training_logs_path = r"PASTE_TRAINING_LOGS_PATH_HERE"
+    testing_logs_path = r"PASTE_TESTING_LOGS_PATH_HERE"
 
     for prune in range(1, 15):  # 1..14
         print(f"\n\n=== Running prune_trials={prune} ===\n")
         train_obj.multipletrain_prune(
-            root_folder=root_tabledata,
+            training_root_folder=training_logs_path,
+            testing_root_folder=testing_logs_path,
             prune_trials=prune,
-            split_type="alternate",
-            percentage=80,
-            accuracy_report_name=f"AccuracyReport_Train90_Pruned{prune}.txt",
+            accuracy_report_name=f"AccuracyReport_SeparateSets_Pruned{prune}.txt",
             make_plot=True,
             max_sample_size=1100
         )
