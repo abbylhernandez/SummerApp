@@ -1,5 +1,6 @@
 .venv/
 .vscode/settings.json
+*.sh
 
 # ==========================================
 # GENERATED RECORDING / DATA FOLDERS
